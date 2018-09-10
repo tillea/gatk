@@ -307,6 +307,16 @@ public final class RMSMappingQuality extends InfoFieldAnnotation implements Stan
         return numOfReads;
     }
 
+    private static boolean hasSpanningDeletionAllele(final Genotype gt) {
+        for(final Allele a : gt.getAlleles()) {
+            boolean hasSpanningDeletion = GATKVCFConstants.isSpanningDeletion(a);
+            if(hasSpanningDeletion) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static RMSMappingQuality getInstance() {
         return instance;
     }

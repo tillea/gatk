@@ -1,7 +1,5 @@
 package org.broadinstitute.hellbender.engine;
 
-import com.intel.genomicsdb.model.GenomicsDBExportConfiguration;
-import com.intel.genomicsdb.reader.GenomicsDBFeatureReader;
 import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.samtools.util.IOUtil;
 import htsjdk.tribble.*;
@@ -15,12 +13,18 @@ import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.IndexFeatureFile;
 import org.broadinstitute.hellbender.tools.genomicsdb.GenomicsDBConstants;
+import org.broadinstitute.hellbender.tools.walkers.GnarlyGenotyper;
 import org.broadinstitute.hellbender.utils.IndexUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.gcs.BucketUtils;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
 import org.broadinstitute.hellbender.utils.nio.SeekableByteChannelPrefetcher;
+
+import com.intel.genomicsdb.model.GenomicsDBExportConfiguration;
+import com.intel.genomicsdb.reader.GenomicsDBFeatureReader;
+import com.googlecode.protobuf.format.JsonFormat;
+import com.intel.genomicsdb.model.GenomicsDBVidMapProto;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,6 +36,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.io.FileReader;
+import java.io.FileNotFoundException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Enables traversals and queries over sources of Features, which are metadata associated with a location
@@ -233,7 +241,13 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
     public FeatureDataSource(final FeatureInput<T> featureInput, final int queryLookaheadBases, final Class<? extends Feature> targetFeatureType,
                              final int cloudPrefetchBuffer, final int cloudIndexPrefetchBuffer) {
         this(featureInput, queryLookaheadBases, targetFeatureType, cloudPrefetchBuffer, cloudIndexPrefetchBuffer,
-             null);
+             null, false);
+    }
+
+    public FeatureDataSource(final FeatureInput<T> featureInput, final int queryLookaheadBases, final Class<? extends Feature> targetFeatureType,
+                             final int cloudPrefetchBuffer, final int cloudIndexPrefetchBuffer, final Path reference) {
+        this(featureInput, queryLookaheadBases, targetFeatureType, cloudPrefetchBuffer, cloudIndexPrefetchBuffer,
+                reference, false);
     }
 
     /**
@@ -249,7 +263,7 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
      * @param reference Path to a reference. May be null. Needed only for reading from GenomicsDB.
      */
     public FeatureDataSource(final FeatureInput<T> featureInput, final int queryLookaheadBases, final Class<? extends Feature> targetFeatureType,
-                             final int cloudPrefetchBuffer, final int cloudIndexPrefetchBuffer, final Path reference) {
+                             final int cloudPrefetchBuffer, final int cloudIndexPrefetchBuffer, final Path reference, final boolean doGnarlyGenotyping) {
         Utils.validateArg( queryLookaheadBases >= 0, "Query lookahead bases must be >= 0");
         this.featureInput = Utils.nonNull(featureInput, "featureInput must not be null");
 
@@ -258,7 +272,7 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
 
         // Create a feature reader without requiring an index.  We will require one ourselves as soon as
         // a query by interval is attempted.
-        this.featureReader = getFeatureReader(featureInput, targetFeatureType, cloudWrapper, cloudIndexWrapper, reference);
+        this.featureReader = getFeatureReader(featureInput, targetFeatureType, cloudWrapper, cloudIndexWrapper, reference, doGnarlyGenotyping);
 
         if (isGenomicsDBPath(featureInput.getFeaturePath())) {
             //genomics db uri's have no associated index file to read from, but they do support random access
@@ -294,7 +308,7 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
     private static <T extends Feature> FeatureReader<T> getFeatureReader(final FeatureInput<T> featureInput, final Class<? extends Feature> targetFeatureType,
                                                                          final Function<SeekableByteChannel, SeekableByteChannel> cloudWrapper,
                                                                          final Function<SeekableByteChannel, SeekableByteChannel> cloudIndexWrapper,
-                                                                         final Path reference) {
+                                                                         final Path reference, final boolean callGenotypes) {
         if (isGenomicsDBPath(featureInput.getFeaturePath())) {
             try {
                 if (reference == null) {
@@ -302,7 +316,7 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
                 }
                 try {
                     final File referenceAsFile = reference.toFile();
-                    return (FeatureReader<T>)getGenomicsDBFeatureReader(featureInput.getFeaturePath(), referenceAsFile);
+                    return (FeatureReader<T>)getGenomicsDBFeatureReader(featureInput.getFeaturePath(), referenceAsFile, callGenotypes);
                 } catch (final UnsupportedOperationException e){
                     throw new UserException.BadInput("GenomicsDB requires that the reference be a local file.", e);
                 }
@@ -364,7 +378,7 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
         }
     }
 
-    private static FeatureReader<VariantContext> getGenomicsDBFeatureReader(final String path, final File reference) {
+    private static FeatureReader<VariantContext> getGenomicsDBFeatureReader(final String path, final File reference, final boolean callGenotypes) {
         if( !isGenomicsDBPath(path) ) {
             throw new IllegalArgumentException("Trying to create a GenomicsDBReader from a non-GenomicsDB input");
         }
@@ -390,11 +404,18 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
                     GenomicsDBConstants.DEFAULT_VCFHEADER_FILE_NAME + ") could not be read from GenomicsDB workspace " + workspace.getAbsolutePath(), e);
         }
 
-        final GenomicsDBExportConfiguration.ExportConfiguration exportConfigurationBuilder =
-                createExportConfiguration(reference, workspace, callsetJson, vidmapJson, vcfHeader);
+        final GenomicsDBExportConfiguration.ExportConfiguration exportConfiguration;
+        if (callGenotypes) {
+            exportConfiguration =
+                    createExportConfiguration(reference, workspace, callsetJson, vidmapJson, vcfHeader, true);
+        }
+        else {
+            exportConfiguration =
+                    createExportConfiguration(reference, workspace, callsetJson, vidmapJson, vcfHeader);
+        }
 
         try {
-            return new GenomicsDBFeatureReader<>(exportConfigurationBuilder, new BCF2Codec(), Optional.empty());
+            return new GenomicsDBFeatureReader<>(exportConfiguration, new BCF2Codec(), Optional.empty());
         } catch (final IOException e) {
             throw new UserException("Couldn't create GenomicsDBFeatureReader", e);
         }
@@ -402,7 +423,7 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
 
     private static GenomicsDBExportConfiguration.ExportConfiguration createExportConfiguration(final File reference, final File workspace,
                                                                                                final File callsetJson, final File vidmapJson,
-                                                                                               final File vcfHeader) {
+                                                                                               final File vcfHeader, final boolean doGnarlyGenotyping) {
         GenomicsDBExportConfiguration.ExportConfiguration.Builder exportConfigurationBuilder =
                 GenomicsDBExportConfiguration.ExportConfiguration.newBuilder()
                         .setWorkspace(workspace.getAbsolutePath())
@@ -414,6 +435,11 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
                         .setProduceGTWithMinPLValueForSpanningDeletions(false)
                         .setSitesOnlyQuery(false)
                         .setMaxDiploidAltAllelesThatCanBeGenotyped(GenotypeLikelihoods.MAX_DIPLOID_ALT_ALLELES_THAT_CAN_BE_GENOTYPED);
+
+        if (doGnarlyGenotyping) {
+            exportConfigurationBuilder.setProduceGTField(true).setMaxDiploidAltAllelesThatCanBeGenotyped(GnarlyGenotyper.PIPELINE_MAX_ALT_COUNT);
+        }
+
         Path arrayFolder = Paths.get(workspace.getAbsolutePath(), GenomicsDBConstants.DEFAULT_ARRAY_NAME).toAbsolutePath();
 
         // For the multi-interval support, we create multiple arrays (directories) in a single workspace -
@@ -435,7 +461,115 @@ public final class FeatureDataSource<T extends Feature> implements GATKDataSourc
             exportConfigurationBuilder.setGenerateArrayNameFromPartitionBounds(true);
         }
 
+        //Modify combine operations for INFO fields using the Protobuf API
+        //
+        //References
+        //GenomicsDB Protobuf structs: https://github.com/Intel-HLS/GenomicsDB/blob/master/src/resources/genomicsdb_vid_mapping.proto
+        //Protobuf generated Java code guide:
+        //https://developers.google.com/protocol-buffers/docs/javatutorial#the-protocol-buffer-api
+        //https://developers.google.com/protocol-buffers/docs/reference/java-generated
+
+        //Parse the vid json and create an in-memory Protobuf structure representing the
+        //information in the JSON file
+        GenomicsDBVidMapProto.VidMappingPB vidMapPB = null;
+        try {
+          vidMapPB = getProtobufVidMappingFromJsonFile(vidmapJson);
+        }
+        catch (final IOException e) {
+          throw new UserException("Could not open vid json file "+vidmapJson, e);
+        }
+
+        //In vidMapPB, fields is a list of GenomicsDBVidMapProto.GenomicsDBFieldInfo objects
+        //Each GenomicsDBFieldInfo object contains information about a specific field in the TileDB/GenomicsDB store
+        //We iterate over the list and create a field name to list index map
+        HashMap<String, Integer> fieldNameToIndexInVidFieldsList =
+            getFieldNameToListIndexInProtobufVidMappingObject(vidMapPB);
+
+        //Update combine operations for GnarlyGenotyper
+        vidMapPB = updateINFOFieldCombineOperation(vidMapPB, fieldNameToIndexInVidFieldsList, "MQ_DP", "sum");
+        vidMapPB = updateINFOFieldCombineOperation(vidMapPB, fieldNameToIndexInVidFieldsList, "QUALapprox", "sum");
+        vidMapPB = updateINFOFieldCombineOperation(vidMapPB, fieldNameToIndexInVidFieldsList, "VarDP", "sum");
+
+        if(vidMapPB != null) {
+            //Use rebuilt vidMap in exportConfiguration
+            //NOTE: this does NOT update the JSON file, the vidMapPB is a temporary structure that's passed to
+            //C++ modules of GenomicsDB for this specific query. Other queries will continue to use the information
+            //in the JSON file
+            exportConfigurationBuilder.setVidMapping(vidMapPB);
+        }
+
         return exportConfigurationBuilder.build();
+    }
+
+    private static GenomicsDBExportConfiguration.ExportConfiguration createExportConfiguration(final File reference, final File workspace,
+                                                                                               final File callsetJson, final File vidmapJson,
+                                                                                               final File vcfHeader) {
+        return createExportConfiguration(reference, workspace, callsetJson, vidmapJson, vcfHeader, false);
+    }
+
+    /**
+     *  Parse the vid json and create an in-memory Protobuf structure representing the
+     *  information in the JSON file
+     *  @param vidmapJson vid JSON file
+     *  @return Protobuf object
+     */
+    public static GenomicsDBVidMapProto.VidMappingPB getProtobufVidMappingFromJsonFile(final File vidmapJson)
+        throws IOException {
+        GenomicsDBVidMapProto.VidMappingPB.Builder vidMapBuilder = GenomicsDBVidMapProto.VidMappingPB.newBuilder();
+        JsonFormat.merge(new FileReader(vidmapJson), vidMapBuilder);
+        return vidMapBuilder.build();
+    }
+
+    /**
+     * In vidMapPB, fields is a list of GenomicsDBVidMapProto.GenomicsDBFieldInfo objects
+     * Each GenomicsDBFieldInfo object contains information about a specific field in the TileDB/GenomicsDB store
+     * We iterate over the list and create a field name to list index map
+     * @param vidMapPB Protobuf vid mapping object
+     * @return map from field name to index in vidMapPB.fields list
+     */
+    public static HashMap<String, Integer> getFieldNameToListIndexInProtobufVidMappingObject(
+            final GenomicsDBVidMapProto.VidMappingPB vidMapPB) {
+        HashMap<String, Integer> fieldNameToIndexInVidFieldsList = new HashMap<String, Integer>();
+        for(int fieldIdx=0;fieldIdx<vidMapPB.getFieldsCount();++fieldIdx)
+            fieldNameToIndexInVidFieldsList.put(vidMapPB.getFields(fieldIdx).getName(), fieldIdx);
+        return fieldNameToIndexInVidFieldsList;
+    }
+
+    /**
+     * Update vid Protobuf object with new combine operation for field
+     * @param vidMapPB input vid object
+     * @param fieldNameToIndexInVidFieldsList name to index in list
+     * @param fieldName INFO field name
+     * @param newCombineOperation combine op ("sum", "median")
+     * @return updated vid Protobuf object if field exists, else null
+     */
+    public static GenomicsDBVidMapProto.VidMappingPB updateINFOFieldCombineOperation(
+            final GenomicsDBVidMapProto.VidMappingPB vidMapPB,
+            final Map<String, Integer> fieldNameToIndexInVidFieldsList,
+            final String fieldName,
+            final String newCombineOperation)
+    {
+        int fieldIdx = fieldNameToIndexInVidFieldsList.containsKey(fieldName)
+            ? fieldNameToIndexInVidFieldsList.get(fieldName) : -1;
+        if(fieldIdx >= 0) {
+            //Would need to rebuild vidMapPB - so get top level builder first
+            GenomicsDBVidMapProto.VidMappingPB.Builder updatedVidMapBuilder = vidMapPB.toBuilder();
+            //To update the list element corresponding to fieldName, we get the builder for that specific list element
+            GenomicsDBVidMapProto.GenomicsDBFieldInfo.Builder fieldBuilder =
+                updatedVidMapBuilder.getFieldsBuilder(fieldIdx);
+            //And update its combine operation
+            fieldBuilder.setVCFFieldCombineOperation(newCombineOperation);
+
+            //Shorter way of writing the same operation
+            /*
+            updatedVidMapBuilder.getFieldsBuilder(fieldIdx)
+                .setVCFFieldCombineOperation(newCombineOperation);
+            */
+
+            //Rebuild full vidMap
+            return updatedVidMapBuilder.build();
+        }
+        return null;
     }
 
     /**
