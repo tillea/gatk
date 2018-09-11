@@ -427,14 +427,20 @@ public final class FuncotatorUtils {
      * @param codingSequenceAlleleStart The start position of the variant in the coding sequence.
      * @param alignedCodingSequenceAlleleStart The start position of the first codon containing part of the variant in the coding sequence.
      * @param refAllele A {@link String} containing the bases in the reference allele for the given variant.
+     * @param strand The {@link Strand} on which the variant occurs.
      * @return {@code true} if the given indel cleanly occurs between two adjacent codons; {@code false} otherwise.
      */
     private static boolean isIndelBetweenCodons(final int codingSequenceAlleleStart,
                                                 final int alignedCodingSequenceAlleleStart,
-                                                final String refAllele ) {
-
-        final int codonOffset = codingSequenceAlleleStart - alignedCodingSequenceAlleleStart;
-        return (((codonOffset + refAllele.length()) % 3) == 0);
+                                                final String refAllele,
+                                                final Strand strand) {
+        if ( strand == Strand.POSITIVE ) {
+            final int codonOffset = codingSequenceAlleleStart - alignedCodingSequenceAlleleStart;
+            return (((codonOffset + refAllele.length()) % 3) == 0);
+        }
+        else {
+            return codingSequenceAlleleStart == alignedCodingSequenceAlleleStart;
+        }
     }
 
     /**
@@ -500,7 +506,7 @@ public final class FuncotatorUtils {
 
                 if ( GATKVariantContextUtils.isFrameshift(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
 
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
                         final String nextRefCodon = getNextReferenceCodon(seqComp.getTranscriptCodingSequence(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getAlignedReferenceAlleleStop(), seqComp.getStrand());
                         return "c.(" + (seqComp.getAlignedCodingSequenceAlleleStart() + 3) + "-" + (seqComp.getAlignedCodingSequenceAlleleStart() + 5) + ")" +
                                 nextRefCodon.toLowerCase() + "fs";
@@ -515,7 +521,7 @@ public final class FuncotatorUtils {
                     }
                 }
                 else {
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
                         final String nextRefCodon = getNextReferenceCodon(seqComp.getTranscriptCodingSequence(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getAlignedReferenceAlleleStop(), seqComp.getStrand());
 
                         // Here we adjust everything "right" by 3 bases (1 codon) because of the leading base that is
@@ -548,7 +554,7 @@ public final class FuncotatorUtils {
             // Deletion:
             else {
                 if ( GATKVariantContextUtils.isFrameshift(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
 
                         // Check to see if the deletion actually starts in the next codon, if it does then we skip the
                         // current codon and only display the next one:
@@ -597,7 +603,7 @@ public final class FuncotatorUtils {
                     final String allRefCodons = (seqComp.getAlignedCodingSequenceReferenceAllele() + String.join("", nextRefCodons)).toLowerCase();
 
                     // This means that the deletion is aligned with a codon:
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
 
                         // An entire codon / set of codons got deleted.
                         // Just put `DEL` after it.
@@ -825,7 +831,7 @@ public final class FuncotatorUtils {
 
                 if ( GATKVariantContextUtils.isFrameshift(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
 
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
                         final String nextRefCodon = getNextReferenceCodon(seqComp.getTranscriptCodingSequence(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getAlignedReferenceAlleleStop(), seqComp.getStrand());
                         return "p." + createAminoAcidSequence(nextRefCodon) + (protChangeStartPos + 1) + "fs";
                     }
@@ -837,7 +843,7 @@ public final class FuncotatorUtils {
                     }
                 }
                 else {
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
                         return "p." + protChangeStartPos + "_" + (protChangeStartPos + 1) + "ins"+
                                 createAminoAcidSequence(seqComp.getAlignedAlternateAllele().substring(3));
                     }
@@ -873,7 +879,7 @@ public final class FuncotatorUtils {
             // Deletion:
             else {
                 if ( GATKVariantContextUtils.isFrameshift(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
 
                         // Check to see if the deletion actually starts in the next codon, if it does then we skip the
                         // current codon and only display the next one:
@@ -921,13 +927,11 @@ public final class FuncotatorUtils {
                     final String allRefCodons = (seqComp.getAlignedCodingSequenceReferenceAllele() + String.join("", nextRefCodons)).toLowerCase();
 
                     // This means that the deletion is aligned with a codon:
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
 
                         // An entire codon / set of codons got deleted.
                         // Just put `DEL` after it.
                         // NOTE: We need to ignore the first codon in the list because of the leading base for indels
-//                        return "p." + (protChangeStartPos + 1) + "_" + endPos
-//                                + createAminoAcidSequence(allRefCodons.substring(3)) + "del";
                         return "p." + createAminoAcidSequence(allRefCodons.substring(3)) + (protChangeStartPos + 1) + "del";
                     }
                     // Non-frameshift deletion starting within a codon:
