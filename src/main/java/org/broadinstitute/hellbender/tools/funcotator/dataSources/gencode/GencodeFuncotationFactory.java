@@ -1405,12 +1405,16 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
 
         for ( final GencodeGtfExonFeature exon : transcript.getExons() ) {
 
-            // We have to adjust the exon boundaries to reflect any insertions before them:
-            final int exonStart = adjustLocusForInsertion(exon.getStart(), variant, altAllele, changedBasesInterval);
-            final int exonEnd = adjustLocusForInsertion(exon.getEnd(), variant, altAllele, changedBasesInterval);
-            final SimpleInterval exonInterval = new SimpleInterval(exon.getContig(), exonStart, exonEnd);
+            // Adjust the exon interval if we have an insertion because everything needs to be adjusted to account
+            // for the newly inserted bases:
+            final int adjustedExonStart = adjustLocusForInsertion(exon.getStart(), variant, altAllele, changedBasesInterval);
+            final int adjustedExonEnd = adjustLocusForInsertion(exon.getEnd(), variant, altAllele, changedBasesInterval);
 
-            if ( changedBasesInterval.overlapsWithMargin(exonInterval, spliceSiteVariantWindowBases) ) {
+            final SimpleInterval exonStartInterval = new SimpleInterval(exon.getContig(), adjustedExonStart, adjustedExonStart);
+            final SimpleInterval exonEndInterval   = new SimpleInterval(exon.getContig(), adjustedExonEnd, adjustedExonEnd);
+
+            if ( changedBasesInterval.overlapsWithMargin(exonStartInterval, spliceSiteVariantWindowBases) ||
+                 changedBasesInterval.overlapsWithMargin(exonEndInterval, spliceSiteVariantWindowBases) ) {
                 spliceSiteExon = exon;
                 break;
             }
