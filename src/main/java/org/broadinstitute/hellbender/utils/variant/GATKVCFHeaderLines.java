@@ -62,6 +62,10 @@ public class GATKVCFHeaderLines {
         addFilterLine(new VCFFilterHeaderLine(READ_ORIENTATION_ARTIFACT_FILTER_NAME, "orientation bias detected by the orientation bias mixture model"));
         addFilterLine(new VCFFilterHeaderLine(BAD_HAPLOTYPE_FILTER_NAME, "Variant near filtered variant on same haplotype."));
 
+        //Mitochondrial M2-related filters
+        addFilterLine(new VCFFilterHeaderLine(CHIMERIC_ORIGINAL_ALIGNMENT_FILTER_NAME, "NuMT variant with too many ALT reads originally from autosome"));
+        addFilterLine(new VCFFilterHeaderLine(TLOD_BY_DEPTH_FILTER_NAME, "TLOD divided by depth too low"));
+
 
         addFormatLine(new VCFFormatHeaderLine(ALLELE_BALANCE_KEY, 1, VCFHeaderLineType.Float, "Allele balance for each het genotype"));
         addFormatLine(new VCFFormatHeaderLine(MAPPING_QUALITY_ZERO_BY_SAMPLE_KEY, 1, VCFHeaderLineType.Integer, "Number of Mapping Quality Zero Reads per sample"));

@@ -13,6 +13,8 @@ import org.broadinstitute.hellbender.Main;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
 import org.broadinstitute.hellbender.engine.FeatureDataSource;
 import org.broadinstitute.hellbender.tools.exome.orientationbiasvariantfilter.OrientationBiasUtils;
+import org.broadinstitute.hellbender.tools.walkers.annotator.OriginalAlignment;
+import org.broadinstitute.hellbender.tools.walkers.annotator.PolymorphicNuMT;
 import org.broadinstitute.hellbender.tools.walkers.haplotypecaller.AssemblyBasedCallerArgumentCollection;
 import org.broadinstitute.hellbender.tools.walkers.validation.ConcordanceSummaryRecord;
 import org.broadinstitute.hellbender.utils.MathUtils;
@@ -503,6 +505,8 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
                 "-R", MITO_REF.getAbsolutePath(),
                 "-L", "chrM:1-1000",
                 "-min-pruning", "5",
+                "--annotation", "OriginalAlignment",
+                "--" + M2ArgumentCollection.MEDIAN_AUTOSOMAL_COVERAGE_LONG_NAME, "1556", //arbitrary "autosomal" mean coverage used only for testing
                 "-O", unfilteredVcf.getAbsolutePath());
         runCommandLine(args);
 
@@ -518,6 +522,9 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
                 "chrM:310-310 [T*, TC]",
                 "chrM:750-750 [A*, G]");
         Assert.assertTrue(expectedKeys.stream().allMatch(variantKeys::contains));
+
+        Assert.assertEquals(variants.get(0).getGenotype("NA12878").getAnyAttribute(OriginalAlignment.OA_NOT_CURRENT_CONTIG), "0");
+        Assert.assertEquals(variants.get(0).getGenotype("NA12878").getAnyAttribute(PolymorphicNuMT.POTENTIAL_POLYMORPHIC_NUMT), "true");
     }
 
    @Test

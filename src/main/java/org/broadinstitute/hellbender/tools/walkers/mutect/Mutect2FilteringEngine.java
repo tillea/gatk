@@ -327,6 +327,34 @@ public class Mutect2FilteringEngine {
         }
     }
 
+    private void applyChimericOriginalAlignmentFilter(final MitochondrialFiltersArgumentCollection MTFAC, final VariantContext vc, final FilterResult filterResult) {
+        final Genotype tumorGenotype = vc.getGenotype(tumorSample);
+        final double[] alleleFractions = GATKProtectedVariantContextUtils.getAttributeAsDoubleArray(tumorGenotype, VCFConstants.ALLELE_FREQUENCY_KEY,
+                () -> new double[] {1.0}, 1.0);
+        final int maxFractionIndex = MathUtils.maxElementIndex(alleleFractions);
+        final int[] ADs = tumorGenotype.getAD();
+        final int altCount = ADs[maxFractionIndex + 1];
+
+        if (tumorGenotype.hasAnyAttribute(OriginalAlignment.OA_NOT_CURRENT_CONTIG) & vc.isBiallelic()) {
+            int nonMtOa = Integer.parseInt(tumorGenotype.getAnyAttribute(OriginalAlignment.OA_NOT_CURRENT_CONTIG).toString());
+            if ((double) nonMtOa / altCount > MTFAC.non_mt_alt_by_alt) {
+                filterResult.addFilter(GATKVCFConstants.CHIMERIC_ORIGINAL_ALIGNMENT_FILTER_NAME);
+            }
+        }
+    }
+
+    private void applyTLODDFilter(final MitochondrialFiltersArgumentCollection MTFAC, final VariantContext vc, final FilterResult filterResult) {
+        if(vc.isBiallelic()) {
+            Double TLOD = vc.getAttributeAsDouble("TLOD", 1);
+            Double depth = vc.getAttributeAsDouble("DP", 1);
+            Double TLODD = TLOD / depth;
+            if (TLODD < MTFAC.tlod_by_depth) {
+                filterResult.addFilter(GATKVCFConstants.TLOD_BY_DEPTH_FILTER_NAME);
+            }
+        }
+    }
+
+
     public FilterResult calculateFilters(final M2FiltersArgumentCollection MTFAC, final VariantContext vc,
                                          final Optional<FilteringFirstPass> firstPass) {
         firstPass.ifPresent(ffp -> Utils.validate(ffp.isReadyForSecondPass(), "First pass information has not been processed into a model for the second pass."));
@@ -352,8 +380,25 @@ public class Mutect2FilteringEngine {
         return filterResult;
     }
 
-    private int[] getIntArrayTumorField(final VariantContext vc, final String key) {
+    public FilterResult calculateMitochondrialFilters(MitochondrialFiltersArgumentCollection MTFAC, VariantContext vc) {
+        final FilterResult filterResult = new FilterResult();
+
+        applyInsufficientEvidenceFilter(MTFAC, vc, filterResult);
+        applyDuplicatedAltReadFilter(MTFAC, vc, filterResult);
+        applyStrandArtifactFilter(MTFAC, vc, filterResult);
+        applyContaminationFilter(MTFAC, vc, filterResult);
+        applyBaseQualityFilter(MTFAC, vc, filterResult);
+        applyMappingQualityFilter(MTFAC, vc, filterResult);
+
+        applyChimericOriginalAlignmentFilter(MTFAC, vc, filterResult);
+        applyTLODDFilter(MTFAC, vc, filterResult);
+        return filterResult;
+    }
+
+    int[] getIntArrayTumorField(final VariantContext vc, final String key) {
         return GATKProtectedVariantContextUtils.getAttributeAsIntArray(vc.getGenotype(tumorSample), key, () -> null, 0);
     }
+
+
 
 }
