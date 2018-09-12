@@ -846,7 +846,7 @@ public final class FuncotatorUtils {
         }
         else {
 
-            // If we have a start codon indel, we do not need to render the codon change string.
+            // If we have a start codon indel, we do not need to render the protein change string.
             // (This is an oncotator convention that has been carried over.)
             if ( isStartCodonIndel(seqComp, startCodon) ) {
                 return "";
