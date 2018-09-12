@@ -427,22 +427,13 @@ public final class FuncotatorUtils {
      * @param codingSequenceAlleleStart The start position of the variant in the coding sequence.
      * @param alignedCodingSequenceAlleleStart The start position of the first codon containing part of the variant in the coding sequence.
      * @param refAllele A {@link String} containing the bases in the reference allele for the given variant.
-     * @param strand The {@link Strand} on which the variant occurs.
      * @return {@code true} if the given indel cleanly occurs between two adjacent codons; {@code false} otherwise.
      */
     private static boolean isIndelBetweenCodons(final int codingSequenceAlleleStart,
                                                 final int alignedCodingSequenceAlleleStart,
-                                                final String refAllele,
-                                                final Strand strand) {
-        if ( strand == Strand.POSITIVE ) {
-            final int codonOffset = codingSequenceAlleleStart - alignedCodingSequenceAlleleStart;
-            return (((codonOffset + refAllele.length()) % 3) == 0);
-        }
-        else {
-            // If the leading base is the last one in a codon, then the indel bases will be "between" the codons.
-            // Since a codon is of length 3, adding 2 to the aligned codon start gets the last base in the codon:
-            return codingSequenceAlleleStart == alignedCodingSequenceAlleleStart + 2;
-        }
+                                                final String refAllele) {
+        final int codonOffset = codingSequenceAlleleStart - alignedCodingSequenceAlleleStart;
+        return (((codonOffset + refAllele.length()) % 3) == 0);
     }
 
     /**
@@ -488,9 +479,13 @@ public final class FuncotatorUtils {
      *     alignedCodingSequenceAlternateAllele
      *     codingSequenceAlleleStart
      * @param seqComp {@link SequenceComparison} representing the alternate and reference alleles for a DNA sequence.  Must not be {@code null}.
+     * @param startCodon {@link Locatable} representing the start codon for the coding region for the variant in {@code seqComp}.  Must not be {@code null}.
      * @return A {@link String} representing the codon change for the given {@link SequenceComparison}.
      */
-    public static String getCodonChangeString( final SequenceComparison seqComp ) {
+    public static String getCodonChangeString( final SequenceComparison seqComp,
+                                               final Locatable startCodon) {
+
+        // TODO: WHERE IS THE TEST METHOD FOR THIS!?!?!?!
 
         // ONP:
         if ( GATKVariantContextUtils.isXnp(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
@@ -502,13 +497,18 @@ public final class FuncotatorUtils {
             );
         }
         else {
+            // If we have a start codon indel, we do not need to render the codon change string.
+            // (This is an oncotator convention that has been carried over.)
+            if ( isStartCodonIndel(seqComp, startCodon) ) {
+                return "";
+            }
 
             // Insertion:
             if ( GATKVariantContextUtils.isInsertion(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
 
                 if ( GATKVariantContextUtils.isFrameshift(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
 
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
                         final String nextRefCodon = getNextReferenceCodon(seqComp.getTranscriptCodingSequence(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getAlignedReferenceAlleleStop(), seqComp.getStrand());
                         return "c.(" + (seqComp.getAlignedCodingSequenceAlleleStart() + 3) + "-" + (seqComp.getAlignedCodingSequenceAlleleStart() + 5) + ")" +
                                 nextRefCodon.toLowerCase() + "fs";
@@ -523,7 +523,7 @@ public final class FuncotatorUtils {
                     }
                 }
                 else {
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
                         final String nextRefCodon = getNextReferenceCodon(seqComp.getTranscriptCodingSequence(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getAlignedReferenceAlleleStop(), seqComp.getStrand());
 
                         // Here we adjust everything "right" by 3 bases (1 codon) because of the leading base that is
@@ -556,7 +556,7 @@ public final class FuncotatorUtils {
             // Deletion:
             else {
                 if ( GATKVariantContextUtils.isFrameshift(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
 
                         // Check to see if the deletion actually starts in the next codon, if it does then we skip the
                         // current codon and only display the next one:
@@ -605,7 +605,7 @@ public final class FuncotatorUtils {
                     final String allRefCodons = (seqComp.getAlignedCodingSequenceReferenceAllele() + String.join("", nextRefCodons)).toLowerCase();
 
                     // This means that the deletion is aligned with a codon:
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
 
                         // An entire codon / set of codons got deleted.
                         // Just put `DEL` after it.
@@ -624,6 +624,22 @@ public final class FuncotatorUtils {
                 }
             }
         }
+    }
+
+    private static boolean isStartCodonIndel(final SequenceComparison seqComp, final Locatable startCodon) {
+        // Check if the indel is a start codon insertion / deletion.
+        // If so, we do not render codon change strings (replicates Oncotator behavior):
+
+        final SimpleInterval variantInterval = new SimpleInterval(seqComp.getContig(),
+                seqComp.getAlleleStart(),
+                seqComp.getAlleleStart() + seqComp.getReferenceAllele().length());
+
+        if ( (startCodon != null) &&
+             (startCodon.overlaps(variantInterval)) &&
+             (seqComp.getReferenceAllele().length() != seqComp.getAlternateAllele().length()) ) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -798,9 +814,11 @@ public final class FuncotatorUtils {
      *     transcriptCodingSequence
      *     strand  (must also not be {@link Strand#NONE}
      * @param seqComp {@link SequenceComparison} representing the alternate and reference alleles for a DNA sequence.  Must not be {@code null}.
+     * @param startCodon {@link Locatable} representing the start codon for the coding region for the variant in {@code seqComp}.  Must not be {@code null}.
      * @return A {@link String} representing the codon change for the given {@link SequenceComparison}.
      */
-    public static String getProteinChangeString(final SequenceComparison seqComp) {
+    public static String getProteinChangeString(final SequenceComparison seqComp,
+                                                final Locatable startCodon) {
 
         Utils.nonNull(seqComp);
         Utils.nonNull(seqComp.getReferenceAminoAcidSequence());
@@ -828,12 +846,18 @@ public final class FuncotatorUtils {
         }
         else {
 
+            // If we have a start codon indel, we do not need to render the codon change string.
+            // (This is an oncotator convention that has been carried over.)
+            if ( isStartCodonIndel(seqComp, startCodon) ) {
+                return "";
+            }
+
             // Insertion:
             if ( GATKVariantContextUtils.isInsertion(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
 
                 if ( GATKVariantContextUtils.isFrameshift(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
 
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
                         final String nextRefCodon = getNextReferenceCodon(seqComp.getTranscriptCodingSequence(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getAlignedReferenceAlleleStop(), seqComp.getStrand());
                         return "p." + createAminoAcidSequence(nextRefCodon) + (protChangeStartPos + 1) + "fs";
                     }
@@ -845,7 +869,7 @@ public final class FuncotatorUtils {
                     }
                 }
                 else {
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
                         return "p." + protChangeStartPos + "_" + (protChangeStartPos + 1) + "ins"+
                                 createAminoAcidSequence(seqComp.getAlignedAlternateAllele().substring(3));
                     }
@@ -881,7 +905,7 @@ public final class FuncotatorUtils {
             // Deletion:
             else {
                 if ( GATKVariantContextUtils.isFrameshift(seqComp.getAlignedReferenceAllele(), seqComp.getAlignedAlternateAllele()) ) {
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
 
                         // Check to see if the deletion actually starts in the next codon, if it does then we skip the
                         // current codon and only display the next one:
@@ -929,7 +953,7 @@ public final class FuncotatorUtils {
                     final String allRefCodons = (seqComp.getAlignedCodingSequenceReferenceAllele() + String.join("", nextRefCodons)).toLowerCase();
 
                     // This means that the deletion is aligned with a codon:
-                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele(), seqComp.getStrand()) ) {
+                    if ( isIndelBetweenCodons(seqComp.getCodingSequenceAlleleStart(), seqComp.getAlignedCodingSequenceAlleleStart(), seqComp.getReferenceAllele()) ) {
 
                         // An entire codon / set of codons got deleted.
                         // Just put `DEL` after it.

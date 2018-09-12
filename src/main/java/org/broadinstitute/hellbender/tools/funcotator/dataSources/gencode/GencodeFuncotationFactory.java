@@ -836,8 +836,8 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
         //       A warning will have been generated in createSequenceComparison if the sequenceComparison does not have
         //       coding sequence information.
         if ( sequenceComparison.hasSequenceInfo() ) {
-            final String codonChange = FuncotatorUtils.getCodonChangeString(sequenceComparison);
-            final String proteinChange = FuncotatorUtils.getProteinChangeString(sequenceComparison);
+            final String codonChange = FuncotatorUtils.getCodonChangeString(sequenceComparison, exon.getStartCodon());
+            final String proteinChange = FuncotatorUtils.getProteinChangeString(sequenceComparison, exon.getStartCodon());
 
             gencodeFuncotationBuilder.setCodonChange(codonChange)
                     .setProteinChange(proteinChange);

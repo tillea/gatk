@@ -708,16 +708,18 @@ public class FuncotatorUtilsUnitTest extends GATKBaseTest {
 
         //TODO: Add tests for INDELS, not just ONPs.
 
-        return new Object[][] {
-                {"N",   1,  1,  "G", "AAT",    "GGT",    "p.N1G"},
-                {"NY",  1,  2, "GN", "AATTAT", "GGTAAT", "p.1_2NY>GN"},
-                {"YY",  1,  2, "NY", "TATTAT", "AATTAT", "p.Y1N"},
-                {"NY",  1,  2, "NG", "AATTAT", "AATGGT", "p.Y2G"},
+        final SimpleInterval startCodon = new SimpleInterval("TEST", 1,3);
 
-                {"N",  71, 71,  "G", "AAT",    "GGT",    "p.N71G"},
-                {"NY", 71, 72, "GN", "AATTAT", "GGTAAT", "p.71_72NY>GN"},
-                {"YY", 71, 72, "NY", "TATTAT", "AATTAT", "p.Y71N"},
-                {"NY", 71, 72, "NG", "AATTAT", "AATGGT", "p.Y72G"},
+        return new Object[][] {
+                {"N",   1,  1,  "G", "AAT",    "GGT",    startCodon, "p.N1G"},
+                {"NY",  1,  2, "GN", "AATTAT", "GGTAAT", startCodon, "p.1_2NY>GN"},
+                {"YY",  1,  2, "NY", "TATTAT", "AATTAT", startCodon, "p.Y1N"},
+                {"NY",  1,  2, "NG", "AATTAT", "AATGGT", startCodon, "p.Y2G"},
+
+                {"N",  71, 71,  "G", "AAT",    "GGT",    startCodon, "p.N71G"},
+                {"NY", 71, 72, "GN", "AATTAT", "GGTAAT", startCodon, "p.71_72NY>GN"},
+                {"YY", 71, 72, "NY", "TATTAT", "AATTAT", startCodon, "p.Y71N"},
+                {"NY", 71, 72, "NG", "AATTAT", "AATGGT", startCodon, "p.Y72G"},
         };
     }
 
@@ -1380,6 +1382,7 @@ public class FuncotatorUtilsUnitTest extends GATKBaseTest {
                                     final String altAminoAcidSeq,
                                     final String refAllele,
                                     final String altAllele,
+                                    final Locatable startCodon,
                                     final String expected) {
 
         final SequenceComparison seqComp = new SequenceComparison();
@@ -1389,8 +1392,9 @@ public class FuncotatorUtilsUnitTest extends GATKBaseTest {
         seqComp.setAlternateAminoAcidSequence(altAminoAcidSeq);
         seqComp.setReferenceAllele(refAllele);
         seqComp.setAlternateAllele(altAllele);
+        seqComp.setContig(startCodon.getContig());
 
-        Assert.assertEquals( FuncotatorUtils.getProteinChangeString(seqComp), expected );
+        Assert.assertEquals( FuncotatorUtils.getProteinChangeString(seqComp, startCodon), expected );
     }
 
     @Test (dataProvider = "provideDataForGetProteinChangeEndPosition")
