@@ -1234,7 +1234,7 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
     }
 
     @Test (dataProvider = "provideDataForCreateFuncotations")
-    void testCreateFuncotations(final String expectedGeneName,
+    public void testCreateFuncotations(final String expectedGeneName,
                                 final int chromosomeNumber,
                                 final int start,
                                 final int end,

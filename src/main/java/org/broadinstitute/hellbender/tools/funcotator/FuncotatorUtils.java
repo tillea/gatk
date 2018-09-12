@@ -439,7 +439,9 @@ public final class FuncotatorUtils {
             return (((codonOffset + refAllele.length()) % 3) == 0);
         }
         else {
-            return codingSequenceAlleleStart == alignedCodingSequenceAlleleStart;
+            // If the leading base is the last one in a codon, then the indel bases will be "between" the codons.
+            // Since a codon is of length 3, adding 2 to the aligned codon start gets the last base in the codon:
+            return codingSequenceAlleleStart == alignedCodingSequenceAlleleStart + 2;
         }
     }
 
