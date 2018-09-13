@@ -53,8 +53,15 @@ public class TagGermlineEvents extends GATKTool{
 
     @Argument(
             doc = "Column header to use for the call (amplified, neutral, or deleted).",
-            fullName = INPUT_CALL_HEADER, optional = true)
+            fullName = INPUT_CALL_HEADER,
+            optional = true)
     private String callColumnHeader = "CALL";
+
+    @Argument(
+            doc = "Reciprocal threshold to match a segment (when endpoints do not match).  Over this threshold will cause a tumor segment to be tagged.",
+            fullName = "reciprocal-threshold",
+            optional = true)
+    private double reciprocalThreshold = 0.75;
 
     @Override
     public void traverse() {
@@ -64,7 +71,7 @@ public class TagGermlineEvents extends GATKTool{
 
         final List<AnnotatedInterval> tumorSegments = SimpleGermlineTagger.tagTumorSegmentsWithGermlineActivity(
                 initialTumorSegments, initialNormalSegments, callColumnHeader, getBestAvailableSequenceDictionary(),
-                GERMLINE_TAG_HEADER, paddingInBp);
+                GERMLINE_TAG_HEADER, paddingInBp, reciprocalThreshold);
 
         final List<String> finalAnnotations = tumorAnnotatedIntervalCollection.getAnnotations();
         finalAnnotations.add(GERMLINE_TAG_HEADER);

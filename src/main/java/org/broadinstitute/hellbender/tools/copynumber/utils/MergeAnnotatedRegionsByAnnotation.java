@@ -55,6 +55,28 @@ public class MergeAnnotatedRegionsByAnnotation extends GATKTool {
 
     final static String DEFAULT_SEPARATOR = "__";
 
+    @Argument(
+            doc = "Output contig column name.",
+            fullName = "output-contig-column",
+            optional = true
+    )
+    private String outputContigColumn = "CONTIG";
+
+    @Argument(
+            doc = "Output start position column name.",
+            fullName = "output-start-column",
+            optional = true
+    )
+    private String outputStartColumn = "START";
+
+    @Argument(
+            doc = "Output end column name.",
+            fullName = "output-end-column",
+            optional = true
+    )
+    private String outputEndColumn = "END";
+
+
     @Override
     public void traverse() {
 
@@ -72,7 +94,7 @@ public class MergeAnnotatedRegionsByAnnotation extends GATKTool {
         final List<AnnotatedInterval> mergedSegments = AnnotatedIntervalUtils.mergeRegionsByAnnotation(initialSegments, getBestAvailableSequenceDictionary(), annotationsToMatch,
                 l -> progressMeter.update(l), DEFAULT_SEPARATOR, maxMergeDistance);
 
-        final AnnotatedIntervalHeader header = new AnnotatedIntervalHeader("Chromosome", "Start", "End", new ArrayList<>(mergedSegments.get(0).getAnnotations().keySet()), null);
+        final AnnotatedIntervalHeader header = new AnnotatedIntervalHeader(outputContigColumn, outputStartColumn, outputEndColumn, new ArrayList<>(mergedSegments.get(0).getAnnotations().keySet()), null);
         final AnnotatedIntervalWriter writer = new SimpleAnnotatedIntervalWriter(outputFile);
         writer.writeHeader(header);
         mergedSegments.forEach(s -> writer.add(s));
