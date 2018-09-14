@@ -5,6 +5,9 @@ import htsjdk.samtools.util.CoordMath;
 import htsjdk.samtools.util.Locatable;
 import htsjdk.tribble.bed.BEDFeature;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.math3.linear.Array2DRowRealMatrix;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.logging.log4j.Logger;
 import org.broadinstitute.barclay.argparser.Argument;
 import org.broadinstitute.barclay.argparser.BetaFeature;
 import org.broadinstitute.barclay.argparser.CommandLineProgramProperties;
@@ -14,42 +17,51 @@ import org.broadinstitute.hellbender.cmdline.programgroups.CopyNumberProgramGrou
 import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.copynumber.arguments.CopyNumberArgumentValidationUtils;
+import org.broadinstitute.hellbender.tools.copynumber.arguments.CopyNumberStandardArgument;
 import org.broadinstitute.hellbender.tools.copynumber.formats.collections.AnnotatedIntervalCollection;
+import org.broadinstitute.hellbender.tools.copynumber.formats.collections.SimpleCountCollection;
+import org.broadinstitute.hellbender.tools.copynumber.formats.collections.SimpleIntervalCollection;
 import org.broadinstitute.hellbender.tools.copynumber.formats.metadata.SimpleLocatableMetadata;
 import org.broadinstitute.hellbender.tools.copynumber.formats.records.AnnotatedInterval;
+import org.broadinstitute.hellbender.tools.copynumber.formats.records.SimpleCount;
 import org.broadinstitute.hellbender.tools.copynumber.formats.records.annotation.AnnotationKey;
 import org.broadinstitute.hellbender.tools.copynumber.formats.records.annotation.AnnotationMap;
 import org.broadinstitute.hellbender.tools.copynumber.formats.records.annotation.CopyNumberAnnotations;
 import org.broadinstitute.hellbender.utils.IntervalMergingRule;
 import org.broadinstitute.hellbender.utils.Nucleotide;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
+import org.broadinstitute.hellbender.utils.Utils;
+import org.broadinstitute.hellbender.utils.io.IOUtils;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Given annotated intervals output by {@link AnnotateIntervals} and/or counts collected on those intervals output
  * by {@link CollectReadCounts}, outputs a filtered interval list.  Parameters for filtering based on the annotations
- * and count statistics can be adjusted.
+ * and counts can be adjusted.  Annotation-based filters will be applied first, followed by count-based
+ * filters.
  *
  * <h3>Inputs</h3>
  *
  * <ul>
  *     <li>
- *         Intervals to be filtered.
+           Intervals to be filtered.
  *         The argument {@code interval-merging-rule} must be set to {@link IntervalMergingRule#OVERLAPPING_ONLY}
  *         and all other common arguments for interval padding or merging must be set to their defaults.
- *         A blacklist of regions in which intervals should always be filtered (regardless of other annotation-based or
- *         count-based filters) may also be provided via -XL; this can be used to filter pseudoautosomal regions (PARs),
- *         for example.
+ *         A blacklist of regions in which intervals should always be filtered (regardless of other annotation-based
+ *         or count-based filters) may also be provided via -XL; this can be used to filter pseudoautosomal regions
+ *         (PARs), for example.
  *     </li>
  *     <li>
  *         (Optional) Annotated-intervals file from {@link AnnotateIntervals}.
+ *         Must contain the intervals to be filtered as a subset.  Must be provided if no counts files are provided.
  *     </li>
  *     <li>
  *         (Optional) Counts files (TSV or HDF5 output of {@link CollectReadCounts}).
+ *         Must contain the intervals to be filtered as a subset.  Must be provided if no annotated-intervals file
+ *         is provided.
  *     </li>
  * </ul>
  *
@@ -100,215 +112,162 @@ import java.util.stream.Collectors;
 @DocumentedFeature
 @BetaFeature
 public final class FilterIntervals extends GATKTool {
-    private static final int DEFAULT_FEATURE_QUERY_LOOKAHEAD_IN_BP = 1_000_000;
-
-    public static final String MAPPABILITY_TRACK_PATH_LONG_NAME = "mappability-track";
-    public static final String SEGMENTAL_DUPLICATION_TRACK_PATH_LONG_NAME = "segmental-duplication-track";
-    public static final String FEATURE_QUERY_LOOKAHEAD = "feature-query-lookahead";
+    public static final String MINIMUM_GC_CONTENT_LONG_NAME = "minimum-gc-content";
+    public static final String MAXIMUM_GC_CONTENT_LONG_NAME = "maximum-gc-content";
+    public static final String MINIMUM_MAPPABILITY_LONG_NAME = "minimum-mappability";
+    public static final String MAXIMUM_MAPPABILITY_LONG_NAME = "maximum-mappability";
+    public static final String MINIMUM_SEGMENTAL_DUPLICATION_CONTENT_LONG_NAME = "minimum-segmental-duplication-content";
+    public static final String MAXIMUM_SEGMENTAL_DUPLICATION_CONTENT_LONG_NAME = "maximum-segmental-duplication-content";
 
     @Argument(
-            doc = "Output file for annotated intervals.",
+            doc = "Input file containing annotations for genomic intervals (output of AnnotateIntervals).  " +
+                    "All intervals specified via -L must be contained.  " +
+                    "Must be provided if no counts files are provided.",
+            fullName = CopyNumberStandardArgument.ANNOTATED_INTERVALS_FILE_LONG_NAME,
+            optional = true
+    )
+    private File inputAnnotatedIntervalsFile = null;
+
+    @Argument(
+            doc = "Input TSV or HDF5 files containing integer read counts in genomic intervals (output of CollectReadCounts).  " +
+                    "All intervals specified via -L must be contained.  " +
+                    "Must be provided if no annotated-intervals file is provided.",
+            fullName = StandardArgumentDefinitions.INPUT_LONG_NAME,
+            shortName = StandardArgumentDefinitions.INPUT_SHORT_NAME,
+            minElements = 1
+    )
+    private List<File> inputReadCountFiles = new ArrayList<>();
+
+    @Argument(
+            doc = "Output file for filtered intervals.",
             fullName = StandardArgumentDefinitions.OUTPUT_LONG_NAME,
             shortName = StandardArgumentDefinitions.OUTPUT_SHORT_NAME
     )
-    private File outputAnnotatedIntervalsFile;
+    private File outputFilteredIntervalsFile;
 
     @Argument(
-            doc = "Path to Umap single-read mappability track in .bed or .bed.gz format (see https://bismap.hoffmanlab.org/).  " +
-                    "Overlapping intervals must be merged.",
-            fullName = MAPPABILITY_TRACK_PATH_LONG_NAME,
+            doc = "Minimum allowed value for GC-content annotation (inclusive).",
+            fullName = MINIMUM_GC_CONTENT_LONG_NAME,
             optional = true
     )
-    private FeatureInput<BEDFeature> mappabilityTrackPath;
+    private double minimumGCContent = 0.;
 
     @Argument(
-            doc = "Path to segmental-duplication track in .bed or .bed.gz format (see https://bismap.hoffmanlab.org/).  " +
-                    "Overlapping intervals must be merged.",
-            fullName = SEGMENTAL_DUPLICATION_TRACK_PATH_LONG_NAME,
+            doc = "Maximum allowed value for GC-content annotation (inclusive).",
+            fullName = MAXIMUM_GC_CONTENT_LONG_NAME,
             optional = true
     )
-    private FeatureInput<BEDFeature> segmentalDuplicationTrackPath;
+    private double maximumGCContent = 0.;
 
     @Argument(
-            doc = "Number of bases to cache when querying feature tracks.",
-            fullName = FEATURE_QUERY_LOOKAHEAD,
+            doc = "Minimum allowed value for mappability annotation (inclusive).",
+            fullName = MINIMUM_MAPPABILITY_LONG_NAME,
             optional = true
     )
-    private int featureQueryLookahead = DEFAULT_FEATURE_QUERY_LOOKAHEAD_IN_BP;
+    private double minimumMappability = 0.;
 
-    @Override
-    public boolean requiresReference() {
-        return true;
-    }
+    @Argument(
+            doc = "Maximum allowed value for mappability annotation (inclusive).",
+            fullName = MAXIMUM_MAPPABILITY_LONG_NAME,
+            optional = true
+    )
+    private double maximumMappability = 0.;
 
-    @Override
-    public boolean requiresIntervals() {
-        return true;
-    }
+    @Argument(
+            doc = "Minimum allowed value for segmental-duplication-content annotation (inclusive).",
+            fullName = MINIMUM_SEGMENTAL_DUPLICATION_CONTENT_LONG_NAME,
+            optional = true
+    )
+    private double minimumSegmentalDuplicationContent = 0.;
 
-    private List<SimpleInterval> intervals;
-    private SAMSequenceDictionary sequenceDictionary;
-    private ReferenceDataSource reference;
-    private FeatureManager features;
-    private List<IntervalAnnotator<?>> annotators = new ArrayList<>();
+    @Argument(
+            doc = "Maximum allowed value for segmental-duplication-content annotation (inclusive).",
+            fullName = MAXIMUM_SEGMENTAL_DUPLICATION_CONTENT_LONG_NAME,
+            optional = true
+    )
+    private double maximumSegmentalDuplicationContent = 0.;
+
+    private SimpleIntervalCollection specifiedIntervals;
     private AnnotatedIntervalCollection annotatedIntervals;
+    private RealMatrix readCountMatrix;
 
     @Override
     public void onTraversalStart() {
+        validateArguments();
+
+        if (inputReadCountFiles.isEmpty()) {
+            //only annotated intervals provided (no counts)
+            //we end up reading the annotated intervals twice, first to get the sequence dictionary; probably not worth cleaning up
+            annotatedIntervals = new AnnotatedIntervalCollection(inputAnnotatedIntervalsFile);
+            specifiedIntervals = new SimpleIntervalCollection(
+                    annotatedIntervals.getMetadata(),
+                    intervalArgumentCollection.getIntervals(annotatedIntervals.getMetadata().getSequenceDictionary()));
+            Utils.validateArg(new HashSet<>(annotatedIntervals.getIntervals()).containsAll(specifiedIntervals.getIntervals()),
+                    "Annotated intervals do not contain all specified intervals.");
+        } else {
+            //counts provided
+            final File firstReadCountFile = inputReadCountFiles.get(0);
+            specifiedIntervals = CopyNumberArgumentValidationUtils.resolveIntervals(
+                    firstReadCountFile, intervalArgumentCollection, logger);
+            if (inputAnnotatedIntervalsFile != null) {
+                //both annotated intervals and counts provided
+                annotatedIntervals = CopyNumberArgumentValidationUtils.validateAnnotatedIntervalsSubset(
+                        inputAnnotatedIntervalsFile, specifiedIntervals, logger);
+            }
+            readCountMatrix = constructReadCountMatrix(inputReadCountFiles);
+        }
+        final SimpleIntervalCollection filteredIntervals = filterIntervals();
+        logger.info(String.format("Writing filtered intervals to %s...", outputFilteredIntervalsFile));
+        filteredIntervals.write(outputFilteredIntervalsFile);
+    }
+
+    @Override
+    public void traverse() {}  // no traversal for this tool
+
+    private void validateArguments() {
         CopyNumberArgumentValidationUtils.validateIntervalArgumentCollection(intervalArgumentCollection);
-
-        logger.info("Loading intervals for annotation...");
-        sequenceDictionary = getBestAvailableSequenceDictionary();
-        intervals = intervalArgumentCollection.getIntervals(sequenceDictionary);
-
-        logger.info("Loading resources for annotation...");
-        reference = ReferenceDataSource.of(referenceArguments.getReferencePath());  //the GATKTool ReferenceDataSource is package-protected, so we cannot access it directly
-        features = new FeatureManager(                                              //the GATKTool FeatureManager is package-protected, so we cannot access it directly
-                this,
-                featureQueryLookahead,
-                cloudPrefetchBuffer,
-                cloudIndexPrefetchBuffer,
-                referenceArguments.getReferencePath());
-
-        // always perform GC-content annotation
-        logger.info("Adding GC-content annotator...");
-        annotators.add(new GCContentAnnotator());
-
-        // add optional annotators
-        if (mappabilityTrackPath != null) {
-            logger.info("Adding mappability annotator...");
-            annotators.add(new MappabilityAnnotator(mappabilityTrackPath));
+        if (inputAnnotatedIntervalsFile == null && inputReadCountFiles.isEmpty()) {
+            throw new UserException("Must provide annotated intervals or counts.");
         }
-        if (segmentalDuplicationTrackPath != null) {
-            logger.info("Adding segmental-duplication-content annotator...");
-            annotators.add(new SegmentalDuplicationContentAnnotator(segmentalDuplicationTrackPath));
+        if (inputAnnotatedIntervalsFile != null) {
+            IOUtils.canReadFile(inputAnnotatedIntervalsFile);
         }
-
-        logger.info("Annotating intervals...");
+        inputReadCountFiles.forEach(IOUtils::canReadFile);
+        Utils.validateArg(inputReadCountFiles.size() == new HashSet<>(inputReadCountFiles).size(),
+                "List of input read-count files cannot contain duplicates.");
     }
 
-    @Override
-    public void traverse() {
-        final List<AnnotatedInterval> annotatedIntervalList = new ArrayList<>(intervals.size());
-        for (final SimpleInterval interval : intervals) {
-            final ReferenceContext referenceContext = new ReferenceContext(reference, interval);
-            final FeatureContext featureContext = new FeatureContext(features, interval);
-            final AnnotationMap annotations = new AnnotationMap(annotators.stream()
-                    .collect(Collectors.mapping(
-                            a -> Pair.of(
-                                    a.getAnnotationKey(),
-                                    a.applyAndValidate(interval, referenceContext, featureContext)),
-                            Collectors.toList())));
-            annotatedIntervalList.add(new AnnotatedInterval(interval, annotations));
-            progressMeter.update(interval);
-        }
-        annotatedIntervals = new AnnotatedIntervalCollection(new SimpleLocatableMetadata(sequenceDictionary), annotatedIntervalList);
-    }
-
-    @Override
-    public Object onTraversalSuccess() {
-        reference.close();
-        features.close();
-        logger.info(String.format("Writing annotated intervals to %s...", outputAnnotatedIntervalsFile));
-        annotatedIntervals.write(outputAnnotatedIntervalsFile);
-        return super.onTraversalSuccess();
-    }
-
-    /**
-     * If additional annotators are added to this tool, they should follow this interface.
-     * Validation that the required resources are available should be performed before
-     * calling {@link IntervalAnnotator#apply}.
-     */
-    abstract static class IntervalAnnotator<T> {
-        public abstract AnnotationKey<T> getAnnotationKey();
-
-        abstract T apply(final Locatable interval,
-                         final ReferenceContext referenceContext,
-                         final FeatureContext featureContext);
-
-        T applyAndValidate(final Locatable interval,
-                           final ReferenceContext referenceContext,
-                           final FeatureContext featureContext) {
-            try {
-                return getAnnotationKey().validate(apply(interval, referenceContext, featureContext));
-            } catch (final IllegalArgumentException e) {
-                throw new UserException.BadInput(String.format("%s  " +
-                        "Feature track may contain overlapping intervals; these should be merged.", e.getMessage()));
+    private RealMatrix constructReadCountMatrix(final List<File> inputReadCountFiles) {
+        logger.info("Validating and aggregating input read-counts files...");
+        final int numSamples = inputReadCountFiles.size();
+        final int numIntervals = specifiedIntervals.size();
+        final Set<SimpleInterval> intervalSubset = new HashSet<>(specifiedIntervals.getRecords());
+        final RealMatrix readCountMatrix = new Array2DRowRealMatrix(numSamples, numIntervals);
+        final ListIterator<File> inputReadCountFilesIterator = inputReadCountFiles.listIterator();
+        while (inputReadCountFilesIterator.hasNext()) {
+            final int sampleIndex = inputReadCountFilesIterator.nextIndex();
+            final File inputReadCountFile = inputReadCountFilesIterator.next();
+            logger.info(String.format("Aggregating read-counts file %s (%d / %d)", inputReadCountFile, sampleIndex + 1, numSamples));
+            final SimpleCountCollection readCounts = SimpleCountCollection.read(inputReadCountFile);
+            if (!CopyNumberArgumentValidationUtils.isSameDictionary(
+                    readCounts.getMetadata().getSequenceDictionary(),
+                    specifiedIntervals.getMetadata().getSequenceDictionary())) {
+                logger.warn(String.format("Sequence dictionary for read-counts file %s does not match those in other read-counts files.", inputReadCountFile));
             }
+            final double[] subsetReadCounts = readCounts.getRecords().stream()
+                    .filter(c -> intervalSubset.contains(c.getInterval()))
+                    .mapToDouble(SimpleCount::getCount)
+                    .toArray();
+            Utils.validateArg(subsetReadCounts.length == intervalSubset.size(),
+                    String.format("Intervals for read-count file %s do not contain all specified intervals.",
+                            inputReadCountFile));
+            readCountMatrix.setRow(sampleIndex, subsetReadCounts);
         }
+        return readCountMatrix;
     }
 
-    public static class GCContentAnnotator extends IntervalAnnotator<Double> {
-        @Override
-        public AnnotationKey<Double> getAnnotationKey() {
-            return CopyNumberAnnotations.GC_CONTENT;
-        }
-
-        @Override
-        Double apply(final Locatable interval,
-                     final ReferenceContext referenceContext,
-                     final FeatureContext featureContext) {
-            final Nucleotide.Counter counter = new Nucleotide.Counter();
-            counter.addAll(referenceContext.getBases());
-            final long gcCount = counter.get(Nucleotide.C) + counter.get(Nucleotide.G);
-            final long atCount = counter.get(Nucleotide.A) + counter.get(Nucleotide.T);
-            final long totalCount = gcCount + atCount;
-            return totalCount == 0 ? Double.NaN : gcCount / (double) totalCount;
-        }
-    }
-
-    /**
-     * If scores are provided, intervals will be annotated with the length-weighted average; scores may not be NaN.
-     * Otherwise, scores for covered and uncovered intervals will be taken as unity and zero, respectively.
-     */
-    abstract static class BEDLengthWeightedAnnotator extends IntervalAnnotator<Double> {
-        private final FeatureInput<BEDFeature> trackPath;
-
-        BEDLengthWeightedAnnotator(final FeatureInput<BEDFeature> trackPath) {
-            this.trackPath = trackPath;
-        }
-
-        @Override
-        Double apply(final Locatable interval,
-                     final ReferenceContext referenceContext,
-                     final FeatureContext featureContext) {
-            final int intervalLength = interval.getLengthOnReference();
-            if (intervalLength == 0) {
-                return Double.NaN;
-            }
-            double lengthWeightedSum = 0.;
-            final List<BEDFeature> features = featureContext.getValues(trackPath);
-            for (final BEDFeature feature : features) {
-                final double scoreOrNaN = (double) feature.getScore();
-                final double score = Double.isNaN(scoreOrNaN) ? 1. : scoreOrNaN;    // missing score -> score = 1
-                lengthWeightedSum += score *
-                        CoordMath.getOverlap(
-                                feature.getStart(), feature.getEnd() - 1,       // zero-based
-                                interval.getStart(), interval.getEnd());        // one-based
-            }
-            return lengthWeightedSum / interval.getLengthOnReference();
-        }
-    }
-
-    public static class MappabilityAnnotator extends BEDLengthWeightedAnnotator {
-        MappabilityAnnotator(final FeatureInput<BEDFeature> mappabilityTrackPath) {
-            super(mappabilityTrackPath);
-        }
-
-        @Override
-        public AnnotationKey<Double> getAnnotationKey() {
-            return CopyNumberAnnotations.MAPPABILITY;
-        }
-    }
-
-    public static class SegmentalDuplicationContentAnnotator extends BEDLengthWeightedAnnotator {
-        SegmentalDuplicationContentAnnotator(final FeatureInput<BEDFeature> segmentalDuplicationTrackPath) {
-            super(segmentalDuplicationTrackPath);
-        }
-
-        @Override
-        public AnnotationKey<Double> getAnnotationKey() {
-            return CopyNumberAnnotations.SEGMENTAL_DUPLICATION_CONTENT;
-        }
+    private SimpleIntervalCollection filterIntervals() {
+        //TODO
+        return specifiedIntervals;
     }
 }
