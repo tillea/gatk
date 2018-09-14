@@ -369,12 +369,12 @@ task MergeSegmentByAnnotation {
     }
 }
 
-# TODO: No non-trivial heredocs in WDL.
-# TODO: Lots of commented out code here.
+# TODO: No non-trivial heredocs in WDL.  Add this to the script directory and call via anaconda (future release)
+# TODO: This is a ham-fisted algorithm.  Better approaches exist if this does not meet needs
 task PrototypeACSConversion {
     File model_seg
     File af_param
-
+    Float? maf90_threshold
     String output_filename = basename(model_seg) + ".acs.seg"
     String output_skew_filename = output_filename + ".skew"
 
@@ -388,44 +388,18 @@ import numpy as np
 from collections import defaultdict
 import scipy
 from scipy import special as sp
-# from lmfit import minimize, Parameters
 import os.path
 
 model_segments_seg_input_file = "${model_seg}"
 model_segments_af_param_input_file = "${af_param}"
-# #command-line arguments
-# model_segments_seg_input_file = sys.argv[1]
-# model_segments_af_param_input_file = sys.argv[2]
 alleliccapseg_seg_output_file = "${output_filename}"
 alleliccapseg_skew_output_file = "${output_skew_filename}"
+
+HAM_FIST_THRESHOLD=${default="0.485" maf90_threshold}
 
 # regular expression for matching sample name from header comment line
 sample_name_header_regexp = "^@RG.*SM:(.*)[\t]*.*$"
 
-##define GATK ModelSegments columns
-#model_segments_seg_columns = [
-#    'CONTIG',
-#    'START',
-#    'END',
-#    'NUM_POINTS_COPY_RATIO',
-#    'NUM_POINTS_ALLELE_FRACTION',
-#    'LOG2_COPY_RATIO_POSTERIOR_10',
-#    'LOG2_COPY_RATIO_POSTERIOR_50',
-#    'LOG2_COPY_RATIO_POSTERIOR_90',
-#    'MINOR_ALLELE_FRACTION_POSTERIOR_10',
-#    'MINOR_ALLELE_FRACTION_POSTERIOR_50',
-#    'MINOR_ALLELE_FRACTION_POSTERIOR_90']
-#model_segments_param_columns = [
-#    'PARAMETER_NAME',
-#    'POSTERIOR_10',
-#    'POSTERIOR_20',
-#    'POSTERIOR_30',
-#    'POSTERIOR_40',
-#    'POSTERIOR_50',
-#    'POSTERIOR_60',
-#    'POSTERIOR_70',
-#    'POSTERIOR_80',
-#    'POSTERIOR_90']
 
 #define AllelicCapSeg columns
 alleliccapseg_seg_columns = [
@@ -459,39 +433,10 @@ def read_sample_name(input_file, max_scan_lines=10000):
 model_segments_seg_pd = pd.read_csv(model_segments_seg_input_file,
                                     sep='\t', comment='@', na_values='NA')
 model_segments_af_param_pd = pd.read_csv(model_segments_af_param_input_file, sep='\t', comment='@')
-# assert all(model_segments_seg_pd.columns == model_segments_seg_columns), 'GATK ModelSegments modeled-segments file is missing columns or incorrectly formatted.'
-# assert all(model_segments_af_param_pd.columns == model_segments_param_columns), 'GATK ModelSegments allele-fraction--parameters file is missing columns or incorrectly formatted.'
-# model_segments_seg_sample_name = read_sample_name(model_segments_seg_input_file)
-# model_segments_af_param_sample_name = read_sample_name(model_segments_af_param_input_file)
-# assert len(set([model_segments_seg_sample_name,
-#                model_segments_af_param_sample_name])) == 1, 'Sample names in GATK ModelSegments input files do not match.'
-
-def residual(params, x, data):
-    maf10 = data[0]
-    maf50 = data[1]
-    maf90 = data[2]
-    a = params['a']
-    b = params['b']
-    error = [abs(sp.betaincinv(a, b, x[0]) - maf10), abs(sp.betaincinv(a, b, x[1]) - maf50), abs(sp.betaincinv(a, b, x[2]) - maf90)]
-
-    return error
-
-
-def map_estimate(maf10, maf50, maf90, total_count):
-    params = Parameters()
-    params.add('a', value=1, min = 0, max=total_count)
-    params.add('b', value=1, min = 0, max=total_count)
-#     params.add('b', value=1, min = 0)
-#     params.add('b', min=0, expr=str(total_count) + '-a-1')
-
-    data = np.array([maf10, maf50, maf90])
-    x = np.array([.1, .5, .9 ])
-    out = minimize(residual, params, args=(x, data))
-    return out
 
 def simple_determine_allelic_fraction(model_segments_seg_pd):
     result = model_segments_seg_pd['MINOR_ALLELE_FRACTION_POSTERIOR_50']
-    result[model_segments_seg_pd['MINOR_ALLELE_FRACTION_POSTERIOR_90'] > 0.485] = 0.5
+    result[model_segments_seg_pd['MINOR_ALLELE_FRACTION_POSTERIOR_90'] > HAM_FIST_THRESHOLD] = 0.5
     return result
 
 def convert_model_segments_to_alleliccapseg(model_segments_seg_pd,
@@ -526,26 +471,26 @@ def convert_model_segments_to_alleliccapseg(model_segments_seg_pd,
     alleliccapseg_seg_pd['sigma.major'] = sigma_mu
 
     #For whatever reason, AllelicCapSeg attempts to call CNLOH.  Documentation is spotty, but it seems like it attempts
-    #to distinguish between three states ("0 is flanked on both sides, 1 is one side, 2 is no cn.loh").
-    #Whatever it is trying to do, it is almost certainly flawed.  Let's just set everything to 2 for now.
-    #Hopefully, ABSOLUTE is robust to this, but I am not holding my breath...
-    #if not, we can try to port the logic for CNLOH calling from AllelicCapSeg.
+    # to distinguish between three states ("0 is flanked on both sides, 1 is one side, 2 is no cn.loh").
+    # Let's just set everything to 2 for now.
+    # Hopefully, ABSOLUTE is robust to this ...
     alleliccapseg_seg_pd['SegLabelCNLOH'] = 2
 
-    #One important caveat: for segments with less than 10 hets, AllelicCapSeg also tries to call whether a segment is "split" or not.
-    #That is, it performs a simple hypothesis test on the alternate-allele fractions to see if
-    #a unimodal distribution peaked at 0.5 is supported over a bimodal distribution peaked at f and 1 - f.
-    #If the former is supported, then AllelicCapSeg ignores the MAP estimate of f and simply sets it to be 0.5.
-    #This procedure is flawed in several respects, but it seems that ABSOLUTE may actually be rather sensitive
-    #to this (due to flaws in ABSOLUTE itself).  Again, let's ignore for now, and we can later port this
-    #statistical test if necessary.  I've done it before and already have the python code for it somewhere.
+    #One important caveat: for segments with less than 10 hets [TODO: Verify], AllelicCapSeg also tries to call whether a segment is "split" or not.
+    #  This script will attempt to call "split" on all segments.
+    # ACS performs a simple hypothesis test on the alternate-allele fractions to see if
+    # a unimodal distribution peaked at 0.5 is supported over a bimodal distribution peaked at f and 1 - f.
+    # If the former is supported, then AllelicCapSeg ignores the MAP estimate of f and simply sets it to be 0.5.
+    # ABSOLUTE may actually be rather sensitive to this.  Again, let's ignore for now, and we can later port this
+    # statistical test if necessary.  I've done it above (ham-fistedly) and also have python code for the stat test
+    # somewhere.
 
     #Finally, I believe that ABSOLUTE requires the value of the "skew" parameter from the AllelicCapSeg
-    #allele-fraction model.  This parameter is supposed to allow the model to account for reference bias,
-    #but unfortunately the model likelihood that AllelicCapSeg uses is incorrect.  We corrected this during
-    #the development of AllelicCNV and retain the same corrected model in ModelSegments.
-    #We will try to transform the relevant parameter in the corrected model back to a "skew",
-    #but this operation is ill defined.  Luckily, for WGS, the reference bias is typically negligible.
+    #allele-fraction model.  This parameter is supposed to allow the model to account for reference bias, though correctness
+    # has been called into question.
+    #  We corrected this during the development of AllelicCNV and retain the same corrected model in ModelSegments.
+    # We will try to transform the relevant parameter in the corrected model back to a "skew",
+    # but this operation is ill defined.  Luckily, for WGS, the reference bias is typically negligible.
     model_segments_reference_bias = model_segments_af_param_pd[
         model_segments_af_param_pd['PARAMETER_NAME'] == 'MEAN_BIAS']['POSTERIOR_50']
     alleliccapseg_skew = 2. / (1. + model_segments_reference_bias)
@@ -576,7 +521,6 @@ EOF
         File cnv_acs_conversion_seg = "${output_filename}"
         File cnv_acs_conversion_skew = "${output_skew_filename}"
     }
-
 }
 
 task PrepareForACSConversion {
@@ -625,7 +569,6 @@ task PrepareForACSConversion {
             --segments ${called_seg} --segments ${modeled_seg}  \
             --columns-of-interest ${sep=" --columns-of-interest " columns_of_interest} \
             -O ${output_name}.final.seg -R ${ref_fasta}
-
 
 	>>>
 
