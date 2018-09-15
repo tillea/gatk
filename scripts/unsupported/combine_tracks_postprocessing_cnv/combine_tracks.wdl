@@ -1,6 +1,6 @@
 # A postprocessing workflow for evaluating CNV
 # Totally unsupported
-# This will also generate absolute (CGA) compatible files.  Currently, the balanced-segment calling is extremely
+# This will also generate absolute (CGA CN tool) compatible files.  Currently, the balanced-segment calling is extremely
 #   ham-fisted.
 workflow CombineTracksWorkflow {
 	File tumor_called_seg
@@ -205,7 +205,6 @@ task PruneGermlineTagged {
     File germline_tagged_seg
 
     String output_filename = basename(germline_tagged_seg) + ".pruned.seg"
-    # Ugh ... this command that I am writing here is definitely not ready for prime time
     command <<<
     set -e
         python <<EOF
@@ -370,7 +369,7 @@ task MergeSegmentByAnnotation {
 }
 
 # TODO: No non-trivial heredocs in WDL.  Add this to the script directory and call via anaconda (future release)
-# TODO: This is a ham-fisted algorithm.  Better approaches exist if this does not meet needs
+# TODO: This is a ham-fisted algorithm.  Better approaches exist if this does not meet needs.
 task PrototypeACSConversion {
     File model_seg
     File af_param
@@ -399,7 +398,6 @@ HAM_FIST_THRESHOLD=${default="0.485" maf90_threshold}
 
 # regular expression for matching sample name from header comment line
 sample_name_header_regexp = "^@RG.*SM:(.*)[\t]*.*$"
-
 
 #define AllelicCapSeg columns
 alleliccapseg_seg_columns = [
