@@ -127,7 +127,8 @@ public final class FilterIntervals extends CommandLineProgram {
                     "All intervals specified via -L must be contained.  " +
                     "Must be provided if no annotated-intervals file is provided.",
             fullName = StandardArgumentDefinitions.INPUT_LONG_NAME,
-            shortName = StandardArgumentDefinitions.INPUT_SHORT_NAME
+            shortName = StandardArgumentDefinitions.INPUT_SHORT_NAME,
+            optional = true
     )
     private List<File> inputReadCountFiles = new ArrayList<>();
 
