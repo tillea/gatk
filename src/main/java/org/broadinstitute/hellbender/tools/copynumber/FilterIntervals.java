@@ -32,9 +32,11 @@ import org.broadinstitute.hellbender.utils.Nucleotide;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
+import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import java.io.File;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -202,6 +204,7 @@ public final class FilterIntervals extends GATKTool {
             specifiedIntervals = new SimpleIntervalCollection(
                     annotatedIntervals.getMetadata(),
                     intervalArgumentCollection.getIntervals(annotatedIntervals.getMetadata().getSequenceDictionary()));
+            Utils.validateArg(specifiedIntervals.size() != 0, "At least one interval must be specified.");
             Utils.validateArg(new HashSet<>(annotatedIntervals.getIntervals()).containsAll(specifiedIntervals.getIntervals()),
                     "Annotated intervals do not contain all specified intervals.");
         } else {
@@ -267,7 +270,32 @@ public final class FilterIntervals extends GATKTool {
     }
 
     private SimpleIntervalCollection filterIntervals() {
-        //TODO
-        return specifiedIntervals;
+        //filter by annotations
+        List<AnnotatedInterval> filteredAnnotatedIntervals = annotatedIntervals.getRecords();
+        final List<AnnotationKey<?>> annotationKeys = annotatedIntervals.getRecords().get(0).getAnnotationMap().getKeys();
+        if (annotationKeys.contains(CopyNumberAnnotations.GC_CONTENT)) {    //this should always be true, but we check it anyway
+            filteredAnnotatedIntervals = filteredAnnotatedIntervals.stream()
+                    .filter(i -> {
+                        final double value = i.getAnnotationMap().getValue(CopyNumberAnnotations.GC_CONTENT);
+                        return minimumGCContent <= value && value <= maximumGCContent;})
+                    .collect(Collectors.toList());
+        }
+        if (annotationKeys.contains(CopyNumberAnnotations.MAPPABILITY)) {
+            filteredAnnotatedIntervals = filteredAnnotatedIntervals.stream()
+                    .filter(i -> {
+                        final double value = i.getAnnotationMap().getValue(CopyNumberAnnotations.MAPPABILITY);
+                        return minimumMappability <= value && value <= maximumMappability;})
+                    .collect(Collectors.toList());
+        }
+        if (annotationKeys.contains(CopyNumberAnnotations.SEGMENTAL_DUPLICATION_CONTENT)) {
+            filteredAnnotatedIntervals = filteredAnnotatedIntervals.stream()
+                    .filter(i -> {
+                        final double value = i.getAnnotationMap().getValue(CopyNumberAnnotations.SEGMENTAL_DUPLICATION_CONTENT);
+                        return minimumSegmentalDuplicationContent <= value && value <= maximumSegmentalDuplicationContent;})
+                    .collect(Collectors.toList());
+        }
+        return new SimpleIntervalCollection(
+                specifiedIntervals.getMetadata(),
+                filteredAnnotatedIntervals.stream().map(AnnotatedInterval::getInterval).collect(Collectors.toList()));
     }
 }
