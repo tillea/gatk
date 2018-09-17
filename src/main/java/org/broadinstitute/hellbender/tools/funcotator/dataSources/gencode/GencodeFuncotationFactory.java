@@ -1809,7 +1809,7 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
          gencodeFuncotationBuilder.setLocusLevel( Integer.valueOf(gtfFeature.getLocusLevel().toString()) );
 
         // Check for existence of Appris Rank and set it:
-         gencodeFuncotationBuilder.setApprisRank( getApprisRank( gtfFeature ) );
+         gencodeFuncotationBuilder.setApprisRank( getApprisRank( transcript ) );
 
          // Get the length of the transcript:
          // NOTE: We add 1 because of genomic cordinates:
@@ -2095,10 +2095,11 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
 
     /**
      * Get the Appris Rank from the given {@link GencodeGtfGeneFeature}.
-     * @param gtfFeature The {@link GencodeGtfGeneFeature} from which to get the Appris Rank.
+     * Appris ranks are specified as annotations using {@link org.broadinstitute.hellbender.utils.codecs.gencode.GencodeGtfFeature.FeatureTag}s.
+     * @param gtfFeature The {@link GencodeGtfTranscriptFeature} from which to get the Appris Rank.
      * @return The highest Appris Rank found in the given {@code gtfFeature}; if no Appris Rank exists, {@code null}.
      */
-    private static GencodeGtfFeature.FeatureTag getApprisRank( final GencodeGtfGeneFeature gtfFeature ) {
+    private static GencodeGtfFeature.FeatureTag getApprisRank( final GencodeGtfTranscriptFeature gtfFeature ) {
 
         // Get our appris tag(s) if it/they exist(s):
         final List<GencodeGtfFeature.FeatureTag> gtfApprisTags = gtfFeature.getOptionalFields().stream()

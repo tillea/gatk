@@ -262,7 +262,7 @@ public class GencodeFuncotationUnitTest extends GATKBaseTest {
                                 "A", "T", "big_%20_changes", "T1",
                                 "3'", 1, 1, "A", "ATC", "Lys", 1.0, "ATGCGCAT", Arrays.asList("ONE", "TWO", "THREE")),
                         null,
-                        D + "BUILD1" + D + "chr1" + D + 1 + D + 100 + D +
+                        "Unknown" + D + "BUILD1" + D + "chr1" + D + 1 + D + 100 + D +
                                 GencodeFuncotation.VariantClassification.NONSENSE + D + GencodeFuncotation.VariantClassification.INTRON + D + GencodeFuncotation.VariantType.SNP + D +
                                 "A" + D + "A" + D + "T" + D + "big_%20_changes" + D + "T1" + D +
                                 "3'" + D + "1" + D + 1 + D + "A" + D + "ATC" + D + "Lys" + D + "1.0" + D + "ATGCGCAT" + D + "ONE" + VcfOutputRenderer.OTHER_TRANSCRIPT_DELIMITER + "TWO" + VcfOutputRenderer.OTHER_TRANSCRIPT_DELIMITER + "THREE"

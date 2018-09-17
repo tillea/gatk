@@ -51,7 +51,7 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
     // Whether to do debug output (i.e. leave output around).
     // This should always be false when checked in.
     // These tests would take ~30 minutes to complete each.
-    private static final boolean enableFullScaleTests = true;
+    private static final boolean enableFullScaleTests = false;
     private static final String  LARGE_DATASOURCES_FOLDER = "funcotator_dataSources_latest";
 
     private static final String XSV_CLINVAR_MULTIHIT_TEST_VCF = toolsTestDir + "funcotator" + File.separator + "clinvar_hg19_multihit_test.vcf";
@@ -268,40 +268,35 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
     @DataProvider
     public Object[][] provideForLargeDataValidationTest() {
         return new Object[][]{
-//                {
-//                        "M2_01115161-TA1-filtered.vcf",
-//                        "Homo_sapiens_assembly19.fasta",
-//                        FuncotatorTestConstants.REFERENCE_VERSION_HG19,
-//                },
-//                {
-//                        "C828.TCGA-D3-A2JP-06A-11D-A19A-08.3-filtered.PASS.vcf",
-//                        "Homo_sapiens_assembly19.fasta",
-//                        FuncotatorTestConstants.REFERENCE_VERSION_HG19
-//                },
-//                {
-//                        "hg38_test_variants.vcf",
-//                        "Homo_sapiens_assembly38.fasta",
-//                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
-//                },
-//                {
-//                        "sample21.trimmed.vcf",
-//                        "Homo_sapiens_assembly38.fasta",
-//                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
-//                },
-//                {
-//                        "0816201804HC0_R01C01.vcf",
-//                        "Homo_sapiens_assembly19.fasta",
-//                        FuncotatorTestConstants.REFERENCE_VERSION_HG19
-//                },
-//                {
-//                        "hg38_trio.vcf",
-//                        "Homo_sapiens_assembly38.fasta",
-//                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
-//                },
                 {
-                        "tmp.vcf",
+                        "M2_01115161-TA1-filtered.vcf",
+                        "Homo_sapiens_assembly19.fasta",
+                        FuncotatorTestConstants.REFERENCE_VERSION_HG19,
+                },
+                {
+                        "C828.TCGA-D3-A2JP-06A-11D-A19A-08.3-filtered.PASS.vcf",
                         "Homo_sapiens_assembly19.fasta",
                         FuncotatorTestConstants.REFERENCE_VERSION_HG19
+                },
+                {
+                        "hg38_test_variants.vcf",
+                        "Homo_sapiens_assembly38.fasta",
+                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
+                },
+                {
+                        "sample21.trimmed.vcf",
+                        "Homo_sapiens_assembly38.fasta",
+                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
+                },
+                {
+                        "0816201804HC0_R01C01.vcf",
+                        "Homo_sapiens_assembly19.fasta",
+                        FuncotatorTestConstants.REFERENCE_VERSION_HG19
+                },
+                {
+                        "hg38_trio.vcf",
+                        "Homo_sapiens_assembly38.fasta",
+                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
                 },
         };
     }
@@ -740,6 +735,9 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
             }
             else if ( annotationsToCheckMaf.get(i).equals(MafOutputRendererConstants.FieldName_End_Position) ) {
                 mafFieldValues = maf.getRecords().stream().map(AnnotatedInterval::getEnd).map(x -> new Integer(x)).map(Object::toString).collect(Collectors.toList());
+            }
+            else if ( annotationsToCheckMaf.get(i).equals(MafOutputRendererConstants.FieldName_Hugo_Symbol) ) {
+                mafFieldValues = maf.getRecords().stream().map(x -> x.getAnnotationValue(MafOutputRendererConstants.FieldName_Hugo_Symbol)).map(a -> a.isEmpty() ? "Unknown" : a).collect(Collectors.toList());
             }
             else {
                 mafFieldValues = maf.getRecords().stream().map(v -> v.getAnnotationValue(annotationToCheckMaf)).collect(Collectors.toList());
