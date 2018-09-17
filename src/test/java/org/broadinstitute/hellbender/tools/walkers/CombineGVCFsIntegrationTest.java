@@ -37,8 +37,8 @@ public class CombineGVCFsIntegrationTest extends CommandLineProgramTest {
 
     private static <T> void assertForEachElementInLists(final List<T> actual, final List<T> expected, final BiConsumer<T, T> assertion) {
         Assert.assertEquals(actual.size(), expected.size(), "different number of elements in lists:\n"
-                + actual.stream().map(Object::toString).collect(Collectors.joining("\n","actual:\n","\n"))
-                +  expected.stream().map(Object::toString).collect(Collectors.joining("\n","expected:\n","\n")));
+                + (expected.size() <= 1000 ? actual.stream().map(Object::toString).collect(Collectors.joining("\n","actual:\n","\n"))
+                +  expected.stream().map(Object::toString).collect(Collectors.joining("\n","expected:\n","\n")) : "lists too large to output"));
         for (int i = 0; i < actual.size(); i++) {
 
             assertion.accept(actual.get(i), expected.get(i));
