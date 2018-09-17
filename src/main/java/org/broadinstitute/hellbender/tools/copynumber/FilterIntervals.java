@@ -267,7 +267,7 @@ public final class FilterIntervals extends CommandLineProgram {
     private SimpleIntervalCollection filterIntervals() {
         //filter by annotations
         List<AnnotatedInterval> filteredAnnotatedIntervals = annotatedIntervals.getRecords();
-        final int numSpecifiedIntervals = specifiedIntervals.size();
+        int numRemainingIntervals = specifiedIntervals.size();
         final List<AnnotationKey<?>> annotationKeys = annotatedIntervals.getRecords().get(0).getAnnotationMap().getKeys();
         if (annotationKeys.contains(CopyNumberAnnotations.GC_CONTENT)) {    //this should always be true, but we check it anyway
             filteredAnnotatedIntervals = filteredAnnotatedIntervals.stream()
@@ -276,7 +276,8 @@ public final class FilterIntervals extends CommandLineProgram {
                         return minimumGCContent <= value && value <= maximumGCContent;})
                     .collect(Collectors.toList());
             logger.info(String.format("%d / %d intervals passed GC-content filter [%s, %s]...",
-                    filteredAnnotatedIntervals.size(), numSpecifiedIntervals, minimumGCContent, maximumGCContent));
+                    filteredAnnotatedIntervals.size(), numRemainingIntervals, minimumGCContent, maximumGCContent));
+            numRemainingIntervals = filteredAnnotatedIntervals.size();
         }
         if (annotationKeys.contains(CopyNumberAnnotations.MAPPABILITY)) {
             filteredAnnotatedIntervals = filteredAnnotatedIntervals.stream()
@@ -285,7 +286,8 @@ public final class FilterIntervals extends CommandLineProgram {
                         return minimumMappability <= value && value <= maximumMappability;})
                     .collect(Collectors.toList());
             logger.info(String.format("%d / %d intervals passed mappability filter [%s, %s]...",
-                    filteredAnnotatedIntervals.size(), numSpecifiedIntervals, minimumMappability, maximumMappability));
+                    filteredAnnotatedIntervals.size(), numRemainingIntervals, minimumMappability, maximumMappability));
+            numRemainingIntervals = filteredAnnotatedIntervals.size();
         }
         if (annotationKeys.contains(CopyNumberAnnotations.SEGMENTAL_DUPLICATION_CONTENT)) {
             filteredAnnotatedIntervals = filteredAnnotatedIntervals.stream()
@@ -294,7 +296,8 @@ public final class FilterIntervals extends CommandLineProgram {
                         return minimumSegmentalDuplicationContent <= value && value <= maximumSegmentalDuplicationContent;})
                     .collect(Collectors.toList());
             logger.info(String.format("%d / %d intervals passed segmental-duplication-content filter [%s, %s]...",
-                    filteredAnnotatedIntervals.size(), numSpecifiedIntervals, minimumSegmentalDuplicationContent, maximumSegmentalDuplicationContent));
+                    filteredAnnotatedIntervals.size(), numRemainingIntervals, minimumSegmentalDuplicationContent, maximumSegmentalDuplicationContent));
+            numRemainingIntervals = filteredAnnotatedIntervals.size();
         }
         return new SimpleIntervalCollection(
                 specifiedIntervals.getMetadata(),
