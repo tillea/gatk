@@ -48,7 +48,7 @@ public class CombineGVCFsIntegrationTest extends CommandLineProgramTest {
     @DataProvider
     public Object[][] gvcfsToCombine() {
         return new Object[][]{
-                // Simple Test, spanning deletions
+               /*// Simple Test, spanning deletions
                 {new File[]{getTestFile("spanningDel.1.g.vcf"),getTestFile("spanningDel.2.g.vcf")}, getTestFile("spanningDeletionRestrictToStartExpected.vcf"), NO_EXTRA_ARGS, b37_reference_20_21},
                 // Simple Test, multiple spanning deletions for one file
                 {new File[]{getTestFile("spanningDel.many.g.vcf")}, getTestFile("testMultipleSpanningDeletionsForOneSample.vcf"), NO_EXTRA_ARGS, b37_reference_20_21},
@@ -79,7 +79,7 @@ public class CombineGVCFsIntegrationTest extends CommandLineProgramTest {
                 {new File[]{getTestFile("gvcfExample1WithTrailingReferenceBlocks.g.vcf"), getTestFile("gvcfExample2WithTrailingReferenceBlocks.g.vcf")},
                         getTestFile("gvcfWithTrailingReferenceBlocksBandedExpected.g.vcf"),
                         Arrays.asList("--" + CombineGVCFs.BREAK_BANDS_LONG_NAME, "2000000"),
-                        b38_reference_20_21},
+                        b38_reference_20_21},        */
                 {new File[]{NA12878_HG37, getTestFile("YRIoffspring.chr20snippet.g.vcf")}, getTestFile("newMQcalc.combined.g.vcf"), NO_EXTRA_ARGS, b37_reference_20_21},
         };
     }
