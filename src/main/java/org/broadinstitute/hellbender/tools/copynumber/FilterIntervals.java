@@ -1,42 +1,34 @@
 package org.broadinstitute.hellbender.tools.copynumber;
 
-import htsjdk.samtools.SAMSequenceDictionary;
-import htsjdk.samtools.util.CoordMath;
-import htsjdk.samtools.util.Locatable;
-import htsjdk.tribble.bed.BEDFeature;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.apache.commons.math3.linear.RealMatrix;
-import org.apache.logging.log4j.Logger;
 import org.broadinstitute.barclay.argparser.Argument;
+import org.broadinstitute.barclay.argparser.ArgumentCollection;
 import org.broadinstitute.barclay.argparser.BetaFeature;
 import org.broadinstitute.barclay.argparser.CommandLineProgramProperties;
 import org.broadinstitute.barclay.help.DocumentedFeature;
+import org.broadinstitute.hellbender.cmdline.CommandLineProgram;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
+import org.broadinstitute.hellbender.cmdline.argumentcollections.IntervalArgumentCollection;
+import org.broadinstitute.hellbender.cmdline.argumentcollections.OptionalIntervalArgumentCollection;
 import org.broadinstitute.hellbender.cmdline.programgroups.CopyNumberProgramGroup;
-import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.copynumber.arguments.CopyNumberArgumentValidationUtils;
 import org.broadinstitute.hellbender.tools.copynumber.arguments.CopyNumberStandardArgument;
 import org.broadinstitute.hellbender.tools.copynumber.formats.collections.AnnotatedIntervalCollection;
 import org.broadinstitute.hellbender.tools.copynumber.formats.collections.SimpleCountCollection;
 import org.broadinstitute.hellbender.tools.copynumber.formats.collections.SimpleIntervalCollection;
-import org.broadinstitute.hellbender.tools.copynumber.formats.metadata.SimpleLocatableMetadata;
 import org.broadinstitute.hellbender.tools.copynumber.formats.records.AnnotatedInterval;
 import org.broadinstitute.hellbender.tools.copynumber.formats.records.SimpleCount;
 import org.broadinstitute.hellbender.tools.copynumber.formats.records.annotation.AnnotationKey;
-import org.broadinstitute.hellbender.tools.copynumber.formats.records.annotation.AnnotationMap;
 import org.broadinstitute.hellbender.tools.copynumber.formats.records.annotation.CopyNumberAnnotations;
 import org.broadinstitute.hellbender.utils.IntervalMergingRule;
-import org.broadinstitute.hellbender.utils.Nucleotide;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
-import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import java.io.File;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -113,7 +105,7 @@ import java.util.stream.Collectors;
 )
 @DocumentedFeature
 @BetaFeature
-public final class FilterIntervals extends GATKTool {
+public final class FilterIntervals extends CommandLineProgram {
     public static final String MINIMUM_GC_CONTENT_LONG_NAME = "minimum-gc-content";
     public static final String MAXIMUM_GC_CONTENT_LONG_NAME = "maximum-gc-content";
     public static final String MINIMUM_MAPPABILITY_LONG_NAME = "minimum-mappability";
@@ -146,6 +138,10 @@ public final class FilterIntervals extends GATKTool {
             shortName = StandardArgumentDefinitions.OUTPUT_SHORT_NAME
     )
     private File outputFilteredIntervalsFile;
+
+    @ArgumentCollection
+    protected IntervalArgumentCollection intervalArgumentCollection
+            = new OptionalIntervalArgumentCollection();
 
     @Argument(
             doc = "Minimum allowed value for GC-content annotation (inclusive).",
@@ -194,7 +190,7 @@ public final class FilterIntervals extends GATKTool {
     private RealMatrix readCountMatrix;
 
     @Override
-    public void onTraversalStart() {
+    public Object doWork() {
         validateArguments();
 
         if (inputReadCountFiles.isEmpty()) {
@@ -222,10 +218,9 @@ public final class FilterIntervals extends GATKTool {
         final SimpleIntervalCollection filteredIntervals = filterIntervals();
         logger.info(String.format("Writing filtered intervals to %s...", outputFilteredIntervalsFile));
         filteredIntervals.write(outputFilteredIntervalsFile);
-    }
 
-    @Override
-    public void traverse() {}  // no traversal for this tool
+        return "SUCCESS";
+    }
 
     private void validateArguments() {
         CopyNumberArgumentValidationUtils.validateIntervalArgumentCollection(intervalArgumentCollection);
