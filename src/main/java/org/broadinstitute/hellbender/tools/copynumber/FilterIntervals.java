@@ -147,28 +147,28 @@ public final class FilterIntervals extends CommandLineProgram {
             fullName = MINIMUM_GC_CONTENT_LONG_NAME,
             optional = true
     )
-    private double minimumGCContent = 0.;
+    private double minimumGCContent = 0.1;
 
     @Argument(
             doc = "Maximum allowed value for GC-content annotation (inclusive).",
             fullName = MAXIMUM_GC_CONTENT_LONG_NAME,
             optional = true
     )
-    private double maximumGCContent = 0.;
+    private double maximumGCContent = 0.9;
 
     @Argument(
             doc = "Minimum allowed value for mappability annotation (inclusive).",
             fullName = MINIMUM_MAPPABILITY_LONG_NAME,
             optional = true
     )
-    private double minimumMappability = 0.;
+    private double minimumMappability = 0.9;
 
     @Argument(
             doc = "Maximum allowed value for mappability annotation (inclusive).",
             fullName = MAXIMUM_MAPPABILITY_LONG_NAME,
             optional = true
     )
-    private double maximumMappability = 0.;
+    private double maximumMappability = 1.;
 
     @Argument(
             doc = "Minimum allowed value for segmental-duplication-content annotation (inclusive).",
@@ -182,7 +182,7 @@ public final class FilterIntervals extends CommandLineProgram {
             fullName = MAXIMUM_SEGMENTAL_DUPLICATION_CONTENT_LONG_NAME,
             optional = true
     )
-    private double maximumSegmentalDuplicationContent = 0.;
+    private double maximumSegmentalDuplicationContent = 0.5;
 
     private SimpleIntervalCollection specifiedIntervals;
     private AnnotatedIntervalCollection annotatedIntervals;
