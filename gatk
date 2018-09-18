@@ -46,6 +46,7 @@ PACKAGED_LOCAL_JAR_OPTIONS= ["-Dsamjdk.use_async_io_read_samtools=false",
 
 DEFAULT_SPARK_ARGS_PREFIX = '--conf'
 DEFAULT_SPARK_ARGS = {
+    "spark.default.parallelism" : "24",
     "spark.kryoserializer.buffer.max" : "512m",
     "spark.driver.maxResultSize" : "0",
     "spark.driver.userClassPathFirst" : "false",

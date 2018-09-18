@@ -294,10 +294,6 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
     private int shardSize = 100000;
 
     @SuppressWarnings("FieldCanBeLocal")
-    @Argument(doc = "parallelism factor", shortName = "pfactor", fullName = "parallelismFactor", optional = true)
-    private int parallelismFactor = 4;
-
-    @SuppressWarnings("FieldCanBeLocal")
     @Argument(doc = "minimum likelihood (Phred) difference to consider that a template or read support an allele over any other",
             shortName = "infoTLD", fullName = "informativeTemplateLikelihoodDifference", optional = true)
     private double informativeTemplateDifferencePhred = 2.0;
@@ -317,7 +313,6 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
 
     private VariantsSparkSource variantsSource;
     private ReadsSparkSource contigsSource;
-    private int parallelism = 0;
 
     @Override
     public boolean requiresReads() {
@@ -330,8 +325,6 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
     }
 
     private void setUp(final JavaSparkContext ctx) {
-
-        parallelism = ctx.defaultParallelism() * parallelismFactor;
         variantsSource = new VariantsSparkSource(ctx);
         contigsSource = new ReadsSparkSource(ctx);
     }
@@ -358,19 +351,18 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
             final String referenceFilePath = referenceArguments.getReferenceFileName();
 
             final TraversalParameters contigAlignmentsTraversalParameters = composeContigTraversalParameters(ctx, contigsSource,
-                    contigsFile, referenceFilePath, parallelism, intervals, dictionaryBroadcast, svLocatorBroadcast, 1000); // 1000bp padding.
+                    contigsFile, referenceFilePath, intervals, dictionaryBroadcast, svLocatorBroadcast, 1000); // 1000bp padding.
 
             final JavaRDD<SVContext> variants = variantsSource.getParallelVariantContexts(
                     variantArguments.variantFiles.get(0).getFeaturePath(), getIntervals())
                     .map(SVContext::of).filter(GenotypeStructuralVariantsSpark::structuralVariantAlleleIsSupported);
-            final Function<? super Locatable, List<ShardBoundary>> shardBoundaryOf = sharder.toShardBoundaryFunction();
 
             final JavaRDD<GATKRead> contigAlignments = contigsSource
                     .getParallelReads(contigsFile, referenceArguments.getReferenceFileName(), contigAlignmentsTraversalParameters);
 
-            final ShardRDD<Tuple2<SVContext, List<SVContig>>> variantsAndContigs = composeOverlappingContigRecordsPerVariant(variants, contigAlignments, sharder, dictionaryBroadcast, paddingSize, parallelism);
+            final JavaRDD<Tuple2<SVContext, List<SVContig>>> variantsAndContigs = composeOverlappingContigRecordsPerVariant(variants, contigAlignments, sharder, dictionaryBroadcast, paddingSize);
 
-            final JavaPairRDD<SVContext, List<SVHaplotype>> variantsAndHaplotypes = composeHaplotypes(variantsAndContigs, referenceFilePath, paddingSize);
+            final JavaRDD<Tuple2<SVContext, List<SVHaplotype>>> variantsAndHaplotypes = composeHaplotypes(variantsAndContigs, referenceFilePath, paddingSize);
 
             final JavaRDD<SVGenotypingContext> genotypingContexts = composeGenotypingContexts(dictionaryBroadcast, svLocatorBroadcast, insertSizeDistributionBroadcast, variantsAndHaplotypes, sampleName)
                     .filter(context -> context.numberOfTemplates > 0 && context.numberOfHaplotypes >= 2);
@@ -381,13 +373,6 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
             if (outputAlignmentFile != null) {
                 try (final SAMFileWriter outputAlignmentWriter = BamBucketIoUtils.makeWriter(outputAlignmentFile, outputAlignmentHeader, true)) {
                     calls.flatMap(call -> call.outputAlignmentRecords.iterator())
-                            //.mapPartitionsToPair(it -> {
-                            //    final SVIntervalLocator locator = svLocatorBroadcast.getValue();
-                            //    return Utils.map(it, vv -> new Tuple2<>(
-                            //            locator.toSVInterval(vv), vv));
-                            //})
-                            //.sortByKey()
-                            //.values()
                             .toLocalIterator()
                             .forEachRemaining(outputAlignmentWriter::addAlignment);
                 } catch (final Exception ex) {
@@ -401,7 +386,7 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
     private JavaRDD<SVGenotypingContext> composeGenotypingContexts(final Broadcast<SAMSequenceDictionary> dictionaryBroadcast,
                                                                    final Broadcast<SVIntervalLocator> svLocatorBroadcast,
                                                                    final Broadcast<InsertSizeDistribution> insertSizeDistributionBroadcast,
-                                                                   final JavaPairRDD<SVContext, List<SVHaplotype>> variantsAndHaplotypes, String sampleName) {
+                                                                   final JavaRDD<Tuple2<SVContext, List<SVHaplotype>>> variantsAndHaplotypes, String sampleName) {
         final String fastqDir = this.fastqDir;
         final String fastqFileNameFormat = "asm%06d.fastq";
         return variantsAndHaplotypes
@@ -415,13 +400,10 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
                 });
     }
 
-    private static JavaPairRDD<SVContext, List<SVHaplotype>> composeHaplotypes(final ShardRDD<Tuple2<SVContext,List<SVContig>>> variantsAndContigs,
+    private static JavaRDD<Tuple2<SVContext, List<SVHaplotype>>> composeHaplotypes(final JavaRDD<Tuple2<SVContext,List<SVContig>>> variantsAndContigs,
                                                                                final String referencePath, final int paddingSize) {
         return variantsAndContigs
-                .toPairRDD()
-                .flatMapToPair(tuple -> tuple._2.iterator())
-                .reduceByKey((list1, list2) -> Stream.concat(list1.stream(), list2.stream()).distinct().collect(Collectors.toList()))
-                .mapPartitionsToPair(it -> {
+                .mapPartitions(it -> {
                     final ReferenceMultiSparkSource referenceSource = new ReferenceMultiSparkSource(referencePath, SimpleInterval::valueOf);
                     return Utils.map(it, tuple -> {
                         final SVContext variant = tuple._1();
@@ -463,7 +445,7 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
                                                                         final ReadsSparkSource contigsSource,
                                                                         final String contigsSourcePath,
                                                                         final String referenceFilePath,
-                                                                        final int parallelism, final List<SimpleInterval> intervals,
+                                                                        final List<SimpleInterval> intervals,
                                                                         final Broadcast<SAMSequenceDictionary> dictionaryBroadcast,
                                                                         final Broadcast<SVIntervalLocator> svIntervalLocatorBroadcast,
                                                                         final int padding) {
@@ -614,17 +596,15 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
                   });
     }
 
-    private static ShardRDD<Tuple2<SVContext, List<SVContig>>> composeOverlappingContigRecordsPerVariant(
+    private static JavaRDD<Tuple2<SVContext, List<SVContig>>> composeOverlappingContigRecordsPerVariant(
             final JavaRDD<SVContext> variants,
             final JavaRDD<GATKRead> contigs,
             final SparkSharder sharder,
             final Broadcast<SAMSequenceDictionary> dictionaryBroadcast,
-            final int padding,
-            final int parallelism) {
+            final int padding) {
 
         // We group SVContext and GATKReads (assembled contigs) into common shards:
 
-        final SerializableFunction<? super Locatable, List<ShardBoundary>> shardBoundariesOf = sharder.toShardBoundaryFunction();
         // Notice that SVContext should be added to all shards where it has a break-point:
         final ShardRDD<SVContext> variantsSharded = sharder
                 .shard(variants, () -> {
@@ -638,7 +618,7 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
         final ShardRDD<AlignedContig> alignedContigsSharded = sharder
                 .shard(alignedContigs, ac -> ac.getAlignments().stream().map(ai -> ai.referenceSpan).collect(Collectors.toList()));
         // We join together variants and contigs that map to the same shard.
-        final ShardRDD<Tuple2<SVContext, List<AlignedContig>>> variantsAndContigsShared =
+        final JavaPairRDD<SVContext, List<AlignedContig>> variantsAndContigsShared =
                 variantsSharded.groupRight(alignedContigsSharded, (ctxs, alcs) -> {
                     final SAMSequenceDictionary dictionary = dictionaryBroadcast.getValue();
                     final SVIntervalLocator locator = SVIntervalLocator.of(dictionary);
@@ -650,15 +630,20 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
                                         v.getBreakPointIntervals(padding, dictionary, true).stream());
                                 return new Tuple2<>(v, overlappingContigs);
                             }).collect(Collectors.toList());
-                });
-
-
-        // finally we have to merge records on the same variant coming from different shards:
+                }).toPairRDD()
+                  .values()
+                  .flatMapToPair(List::iterator)
+                  .reduceByKey((list1, list2) -> Stream.concat(list1.stream(), list2.stream()).distinct()
+                          .collect(Collectors.toList()));
+        // transform AlignedContig into SVContigs
         return variantsAndContigsShared
-                .mapRecords(tuple -> new Tuple2<>(tuple._1,
-                            tuple._2().stream()
-                                    .map(ac -> SVContig.of(ac, tuple._1(), dictionaryBroadcast.getValue(), padding))
-                                    .collect(Collectors.toList())));
+                .mapPartitions(it -> {
+                    final SAMSequenceDictionary dictionary = dictionaryBroadcast.getValue();
+                    return Utils.map(it, tuple -> new Tuple2<>(tuple._1,
+                                 tuple._2.stream()
+                                         .map(ac -> SVContig.of(ac, tuple._1, dictionary, padding))
+                                         .collect(Collectors.toList())));
+                });
     }
 
     private static <V> SVIntervalTree<List<V>> composeLookupSVIntervalTree(final SVIntervalLocator locator, Collection<? extends V> subjects, Function<? super V, Iterable<? extends Locatable>> locationsOf) {
