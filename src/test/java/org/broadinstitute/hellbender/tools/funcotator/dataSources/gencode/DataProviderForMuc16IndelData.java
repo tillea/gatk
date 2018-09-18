@@ -33,9 +33,12 @@ public class DataProviderForMuc16IndelData {
                 new Object[]{ "MUC16", 19, 8966648, 8966648, GencodeFuncotation.VariantClassification.SPLICE_SITE, GencodeFuncotation.VariantType.INS, "A", "AC", "g.chr19:8966648_8966649insC", "-", null, "c.e81+2", null },
                 new Object[]{ "MUC16", 19, 8966817, 8966817, GencodeFuncotation.VariantClassification.SPLICE_SITE, GencodeFuncotation.VariantType.INS, "C", "CT", "g.chr19:8966817_8966818insT", "-", null, "c.e81-1", null },
                 new Object[]{ "MUC16", 19, 8966815, 8966815, GencodeFuncotation.VariantClassification.SPLICE_SITE, GencodeFuncotation.VariantType.INS, "A", "AT", "g.chr19:8966815_8966816insT", "-", "c.43138_43139insT", "c.(43138-43140)tctfs", "p.S14380fs" },
-                new Object[]{ "MUC16", 19, 8966650, 8966650, GencodeFuncotation.VariantClassification.SPLICE_SITE, GencodeFuncotation.VariantType.INS, "C", "CG", "g.chr19:8966650_8966651insG", "-", "c.43303_43304insG", "c.(43303-43305)gggfs", "p.G14435fs" }
+                new Object[]{ "MUC16", 19, 8966650, 8966650, GencodeFuncotation.VariantClassification.SPLICE_SITE, GencodeFuncotation.VariantType.INS, "C", "CG", "g.chr19:8966650_8966651insG", "-", "c.43303_43304insG", "c.(43303-43305)gggfs", "p.G14435fs" },
                 // ==============================
 
+                // ==============================
+                // Test cases for FS INS issue:
+                new Object[]{ "MUC16", 19, 8966813, 8966813, GencodeFuncotation.VariantClassification.SPLICE_SITE, GencodeFuncotation.VariantType.INS, "A", "AGTGAGA", "g.chr19:8966813_8966814insGTGAGA", "-", "c.43139_43140insTCTCAC", "c.(43135-43147)aggfs", "p.R14379fs" }
         );
     }
 }
