@@ -1,6 +1,6 @@
 #
-# A wrapper for gCNV case workflow intended for lowering computing cost by making it feasible to use 
-# preemptible cloud instances with low memory requirements. CPU, memory and disc requirements can be 
+# A wrapper for the gCNV case workflow intended for lowering computing cost by making it feasible to use 
+# preemptible cloud instances with low memory requirements. CPU, memory and disk requirements can be 
 # lowered for GermlineCNVCaller and DetermineGermlineContigPloidy tasks. 
 # 
 #
@@ -27,13 +27,13 @@ workflow CNVGermlineCaseScatteredWorkflow {
     File ref_fasta_fai
     File ref_fasta
     String gatk_docker
-    Int num_samples_per_scatter_block = 25 #recommended value for WES
+    Int num_samples_per_scatter_block
 
     ##################################
     #### optional basic arguments ####
     ##################################
     File? gatk4_jar_override
-    Int preemptible_attempts = 5
+    Int preemptible_attempts
 
     ####################################################
     #### optional arguments for PreprocessIntervals ####
@@ -54,7 +54,7 @@ workflow CNVGermlineCaseScatteredWorkflow {
     Float? ploidy_sample_psi_scale
     Int? mem_gb_for_determine_germline_contig_ploidy
     Int? cpu_for_determine_germline_contig_ploidy
-    Int? disc_for_determine_germline_contig_ploidy    
+    Int? disk_for_determine_germline_contig_ploidy    
 
     ##########################################################
     #### optional arguments for GermlineCNVCallerCaseMode ####
@@ -64,7 +64,7 @@ workflow CNVGermlineCaseScatteredWorkflow {
     Int? gcnv_max_copy_number
     Int? mem_gb_for_germline_cnv_caller
     Int? cpu_for_germline_cnv_caller
-    Int? disc_for_germline_cnv_caller
+    Int? disk_for_germline_cnv_caller
 
     # optional arguments for germline CNV denoising model
     Float? gcnv_mapping_error_rate
@@ -115,15 +115,15 @@ workflow CNVGermlineCaseScatteredWorkflow {
             gatk_docker = gatk_docker
     }
 
-    Array[Array[String]] splitBamsInput = SplitInputBamsList.splitArray
-    Array[Array[String]] splitBaisInput = SplitInputBaisList.splitArray
+    Array[Array[String]] split_bams = SplitInputBamsList.split_array
+    Array[Array[String]] split_bais = SplitInputBaisList.split_array
 
-    scatter (subarray_index in range(length(splitBamsInput))) {
+    scatter (subarray_index in range(length(split_bams_input))) {
         call GermlineCNVCaseWorkflow.CNVGermlineCaseWorkflow {
             input:
                 intervals = intervals,
-                normal_bams = splitBamsInput[subarray_index],
-                normal_bais = splitBaisInput[subarray_index],
+                normal_bams = split_bams[subarray_index],
+                normal_bais = split_bais[subarray_index],
                 contig_ploidy_model_tar = contig_ploidy_model_tar,
                 gcnv_model_tars = gcnv_model_tars,
                 num_intervals_per_scatter = num_intervals_per_scatter,
@@ -141,13 +141,13 @@ workflow CNVGermlineCaseScatteredWorkflow {
                 ploidy_sample_psi_scale = ploidy_sample_psi_scale,
                 mem_gb_for_determine_germline_contig_ploidy = mem_gb_for_determine_germline_contig_ploidy,
                 cpu_for_determine_germline_contig_ploidy = cpu_for_determine_germline_contig_ploidy,
-                disc_for_determine_germline_contig_ploidy = disc_for_determine_germline_contig_ploidy,
+                disk_for_determine_germline_contig_ploidy = disk_for_determine_germline_contig_ploidy,
                 gcnv_p_alt = gcnv_p_alt,
                 gcnv_cnv_coherence_length = gcnv_cnv_coherence_length,
                 gcnv_max_copy_number = gcnv_max_copy_number,
                 mem_gb_for_germline_cnv_caller = mem_gb_for_germline_cnv_caller,
                 cpu_for_germline_cnv_caller = cpu_for_germline_cnv_caller,
-                disc_for_germline_cnv_caller = disc_for_germline_cnv_caller,
+                disk_for_germline_cnv_caller = disk_for_germline_cnv_caller,
                 gcnv_mapping_error_rate = gcnv_mapping_error_rate,
                 gcnv_sample_psi_scale = gcnv_sample_psi_scale,
                 gcnv_depth_correction_tau = gcnv_depth_correction_tau,
@@ -195,11 +195,14 @@ task SplitInputArray {
     Int machine_mem_mb = 4000
     Int disk_space_gb = 20
     Int cpu = 1
-    Int preemptible_attempts = 5
+    Int? preemptible_attempts
     Boolean use_ssd = false
 
     File input_array_file = write_lines(input_array)
 
+    # This tasks takes as input an array of strings and number of columns (num_inputs_in_scatter_block)
+    # and outputs a 2-dimensional reshaped array with same contents and with width equal to num_inputs_in_scatter_block
+    # (with last row potentially having a smaller length than others)
     command <<<
         python <<CODE
         import math
@@ -218,14 +221,13 @@ task SplitInputArray {
 
     runtime {
         docker: "${gatk_docker}"
-        bootDiskSizeGb: 12
         memory: machine_mem_mb + " MB"
         disks: "local-disk " + select_first([disk_space_gb, 150]) + if use_ssd then " SSD" else " HDD"
         cpu: select_first([cpu, 8])
-        preemptible: select_first([preemptible_attempts, 2])
+        preemptible: select_first([preemptible_attempts, 5])
     }
 
     output {
-        Array[Array[String]] splitArray = read_tsv("input_array_split.tsv")
+        Array[Array[String]] split_array = read_tsv("input_array_split.tsv")
     }
 }

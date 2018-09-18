@@ -3,8 +3,8 @@
 ### Which WDL should you use?
 
 - Cohort WDL: Calling a cohort of samples and building a model for denoising further case samples: ``cnv_germline_cohort_workflow.wdl``
-- Case WDL: calling case samples using a previously built model for denoising: ``cnv_germline_case_workflow.wdl``
-- Scattered case WDL(recommended): functionally equivalent to case WDL, written for reducing cloud compute cost (see below) and wall-clock time ``cnv_germline_case_scattered_workflow.wdl``
+- Case WDL: Calling case samples using a previously built model for denoising: ``cnv_germline_case_workflow.wdl``
+- Scattered case WDL (recommended): Functionally equivalent to case WDL, written for reducing cloud compute cost (see below) and wall-clock time ``cnv_germline_case_scattered_workflow.wdl``
 
 #### Setting up parameter json file for a run
 
@@ -56,15 +56,15 @@ Further explanation of these task-level parameters may be found by invoking the 
 
 #### Required parameters in the scattered germline case workflow
 
-Same required parameters as in germline case workflow, however in order to reduce wall-clock time and compute cost it is recommended to optimize for the following parameters:
+Same required parameters as in the germline case workflow. However, in order to reduce wall-clock time and compute cost, it is recommended to optimize for the following parameters:
 
-- ``CNVGermlineCaseScatteredWorkflow.num_samples_per_scatter_block`` -- (recommended WES value=25) number of samples to process in a single block; blocks of this size will be sent to germline case workflow and processed in a batch; 
-- ``CNVGermlineCaseScatteredWorkflow.preemptible_attempts`` -- (recommended value=5) this allows to reduce cost by using preemptible instances
-- ``CNVGermlineCaseScatteredWorkflow.mem_gb_for_determine_germline_contig_ploidy`` -- amount of memory alloted for ploidy determination tasks (the lower the cheaper)
-- ``CNVGermlineCaseScatteredWorkflow.cpu_for_determine_germline_contig_ploidy`` -- number of CPU cores alloted for ploidy determination tasks (the lower the cheaper)
-- ``CNVGermlineCaseScatteredWorkflow.disc_for_determine_germline_contig_ploidy`` -- amount of storage alloted for ploidy determination tasks (the lower the cheaper) 
-- ``CNVGermlineCaseScatteredWorkflow.mem_gb_for_germline_cnv_caller`` -- amount of memory alloted for gCNV caller tasks (the lower the cheaper)
-- ``CNVGermlineCaseScatteredWorkflow.cpu_for_germline_cnv_caller`` -- number of CPU cores alloted for gCNV caller tasks (the lower the cheaper)
-- ``CNVGermlineCaseScatteredWorkflow.disc_for_germline_cnv_caller`` -- amount of storage alloted for gCNV caller tasks (the lower the cheaper)
+- ``CNVGermlineCaseScatteredWorkflow.num_samples_per_scatter_block`` -- (recommended WES value=25) number of samples to process in a single block; blocks of this size will be sent to the germline case workflow and processed in a batch; 
+- ``CNVGermlineCaseScatteredWorkflow.preemptible_attempts`` -- (recommended value=5) this reduces cost by using preemptible instances
+- ``CNVGermlineCaseScatteredWorkflow.mem_gb_for_determine_germline_contig_ploidy`` -- amount of memory allotted for ploidy determination tasks (the lower the cheaper)
+- ``CNVGermlineCaseScatteredWorkflow.cpu_for_determine_germline_contig_ploidy`` -- number of CPU cores allotted for ploidy determination tasks (the lower the cheaper)
+- ``CNVGermlineCaseScatteredWorkflow.disk_for_determine_germline_contig_ploidy`` -- amount of storage allotted for ploidy determination tasks (the lower the cheaper) 
+- ``CNVGermlineCaseScatteredWorkflow.mem_gb_for_germline_cnv_caller`` -- amount of memory allotted for gCNV caller tasks (the lower the cheaper)
+- ``CNVGermlineCaseScatteredWorkflow.cpu_for_germline_cnv_caller`` -- number of CPU cores allotted for gCNV caller tasks (the lower the cheaper)
+- ``CNVGermlineCaseScatteredWorkflow.disk_for_germline_cnv_caller`` -- amount of storage allotted for gCNV caller tasks (the lower the cheaper)
 
-Note that lowering disc and memory too much will eventually lead to the workflow failing. Lowering number of CPU cores could increase the wall-clock times.
+Note that lowering disk and memory too much will eventually lead to the workflow failing. Lowering the number of CPU cores could increase the wall-clock times.

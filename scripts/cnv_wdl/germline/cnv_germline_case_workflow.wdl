@@ -1,4 +1,4 @@
-# Workflow for running GATK GermlineCNVCaller on a multiple case samples using a trained model (obtained from running 
+# Workflow for running GATK GermlineCNVCaller on multiple case samples using a trained model (obtained from running 
 # GATK GermlineCNVCaller in the cohort mode). Supports both WGS and WES.
 #
 # Notes:
@@ -65,7 +65,7 @@ workflow CNVGermlineCaseWorkflow {
     Float? ploidy_sample_psi_scale
     Int? mem_gb_for_determine_germline_contig_ploidy
     Int? cpu_for_determine_germline_contig_ploidy
-    Int? disc_for_determine_germline_contig_ploidy
+    Int? disk_for_determine_germline_contig_ploidy
 
     ##########################################################
     #### optional arguments for GermlineCNVCallerCaseMode ####
@@ -75,7 +75,7 @@ workflow CNVGermlineCaseWorkflow {
     Int? gcnv_max_copy_number
     Int? mem_gb_for_germline_cnv_caller
     Int? cpu_for_germline_cnv_caller
-    Int? disc_for_germline_cnv_caller
+    Int? disk_for_germline_cnv_caller
 
     # optional arguments for germline CNV denoising model
     Float? gcnv_mapping_error_rate
@@ -153,7 +153,7 @@ workflow CNVGermlineCaseWorkflow {
             gatk_docker = gatk_docker,
             mem_gb = mem_gb_for_determine_germline_contig_ploidy,
             cpu = cpu_for_determine_germline_contig_ploidy,
-            disk_space_gb = disc_for_determine_germline_contig_ploidy,
+            disk_space_gb = disk_for_determine_germline_contig_ploidy,
             mapping_error_rate = ploidy_mapping_error_rate,
             sample_psi_scale = ploidy_sample_psi_scale,
             preemptible_attempts = preemptible_attempts
@@ -298,7 +298,7 @@ task DetermineGermlineContigPloidyCaseMode {
         memory: machine_mem_mb + " MB"
         disks: "local-disk " + select_first([disk_space_gb, 150]) + if use_ssd then " SSD" else " HDD"
         cpu: select_first([cpu, 8])
-        preemptible: select_first([preemptible_attempts, 2])
+        preemptible: select_first([preemptible_attempts, 5])
     }
 
     output {
@@ -428,7 +428,7 @@ task GermlineCNVCallerCaseMode {
         memory: machine_mem_mb + " MB"
         disks: "local-disk " + select_first([disk_space_gb, 150]) + if use_ssd then " SSD" else " HDD"
         cpu: select_first([cpu, 8])
-        preemptible: select_first([preemptible_attempts, 2])
+        preemptible: select_first([preemptible_attempts, 5])
     }
 
     output {
