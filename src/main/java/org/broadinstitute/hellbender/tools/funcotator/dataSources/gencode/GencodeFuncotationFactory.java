@@ -1951,8 +1951,9 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
             condensedFuncotationStringBuilder.append(OTHER_TRANSCRIPTS_INFO_SEP);
             condensedFuncotationStringBuilder.append(funcotation.getVariantClassification());
 
-            if ( !(funcotation.getVariantClassification().equals(GencodeFuncotation.VariantClassification.INTRON) ||
-                    ((funcotation.getSecondaryVariantClassification() != null) && funcotation.getSecondaryVariantClassification().equals(GencodeFuncotation.VariantClassification.INTRON))) ) {
+            if ( (funcotation.getProteinChange() != null) &&
+                 !(funcotation.getVariantClassification().equals(GencodeFuncotation.VariantClassification.INTRON) ||
+                 ((funcotation.getSecondaryVariantClassification() != null) && funcotation.getSecondaryVariantClassification().equals(GencodeFuncotation.VariantClassification.INTRON))) ) {
                 condensedFuncotationStringBuilder.append(OTHER_TRANSCRIPTS_INFO_SEP);
                 condensedFuncotationStringBuilder.append(funcotation.getProteinChange());
             }
