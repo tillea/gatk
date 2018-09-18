@@ -33,7 +33,7 @@ workflow CNVGermlineCaseScatteredWorkflow {
     #### optional basic arguments ####
     ##################################
     File? gatk4_jar_override
-    Int preemptible_attempts
+    Int? preemptible_attempts
 
     ####################################################
     #### optional arguments for PreprocessIntervals ####
