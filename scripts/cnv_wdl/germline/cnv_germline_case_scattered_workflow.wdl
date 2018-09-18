@@ -118,7 +118,7 @@ workflow CNVGermlineCaseScatteredWorkflow {
     Array[Array[String]] split_bams = SplitInputBamsList.split_array
     Array[Array[String]] split_bais = SplitInputBaisList.split_array
 
-    scatter (subarray_index in range(length(split_bams_input))) {
+    scatter (subarray_index in range(length(split_bams))) {
         call GermlineCNVCaseWorkflow.CNVGermlineCaseWorkflow {
             input:
                 intervals = intervals,
